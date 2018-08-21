@@ -28,13 +28,6 @@ class SSETrebuchet extends Trebuchet {
     this.setup()
   }
 
-  private responseToKeepAlive = () => {
-    if (!this.connectionId || !this.timeout || this.timeout > MAX_INT) return
-    this.fetchPing(this.connectionId).catch()
-    clearTimeout(this.keepAliveTimeoutId)
-    this.keepAliveTimeoutId = window.setTimeout(this.source.close(), this.timeout * 1.5)
-  }
-
   protected setup = () => {
     this.source = new EventSource(this.url)
     this.source.onopen = this.handleOpen.bind(this)
@@ -56,7 +49,13 @@ class SSETrebuchet extends Trebuchet {
       }
     }
 
-    this.source.addEventListener(Events.KEEP_ALIVE, this.responseToKeepAlive)
+    this.source.addEventListener(Events.KEEP_ALIVE, () => {
+      if (!this.connectionId || !this.timeout || this.timeout > MAX_INT) return
+      this.fetchPing(this.connectionId).catch()
+      clearTimeout(this.keepAliveTimeoutId)
+      this.keepAliveTimeoutId = window.setTimeout(this.source.close.bind(this.source), this.timeout * 1.5)
+    })
+
     this.source.addEventListener(SSE_ID, (event: any) => {
       this.connectionId = event.data
       this.messageQueue.flush(this.send)
