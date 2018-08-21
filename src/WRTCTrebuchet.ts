@@ -1,18 +1,13 @@
-import Backoff from 'backo2'
-import EventEmitter from 'eventemitter3'
-import {
+import FastRTCPeer, {
   DATA,
-  Data,
-  KEEP_ALIVE,
-  MAX_INT,
-  TRANSPORT_CONNECTED,
-  TRANSPORT_DISCONNECTED,
-  TRANSPORT_RECONNECTED,
-  TRANSPORT_SUPPORTED,
-  TrebuchetEmitter
-} from './getTrebuchet'
-
-import FastRTCPeer, {DATA_CLOSE, DATA_OPEN, DataPayload, DispatchPayload, ERROR, SIGNAL} from '@mattkrick/fast-rtc-peer'
+  DATA_CLOSE,
+  DATA_OPEN,
+  DataPayload,
+  DispatchPayload,
+  ERROR,
+  SIGNAL
+} from '@mattkrick/fast-rtc-peer'
+import Trebuchet, {Data, Events, MAX_INT} from './Trebuchet'
 
 export type FetchSignalServer = (signal: DispatchPayload) => Promise<DispatchPayload | null>
 
@@ -22,122 +17,80 @@ export interface WRTCSettings {
   timeout?: number
 }
 
-class SocketTrebuchet extends (EventEmitter as TrebuchetEmitter) {
+class WRTCTrebuchet extends Trebuchet {
   peer!: FastRTCPeer
-  private readonly backoff: Backoff = new Backoff({jitter: 0.5, min: 1000})
-  private readonly timeout: number
   private readonly rtcConfig: RTCConfiguration
   private readonly fetchSignalServer: FetchSignalServer
-  private unsentMessagesQueue: Array<Data> = []
-  private canConnect: boolean | undefined = undefined
-  private isReconnecting: boolean = false
-  private isTerminal: boolean = false
-  private reconnectTimeoutId: number | undefined
-  private keepAliveTimeoutId: number | undefined
 
   constructor (settings: WRTCSettings) {
-    super()
-    this.timeout = settings.timeout || 10000
+    super(settings)
     this.fetchSignalServer = settings.fetchSignalServer
     this.rtcConfig = settings.rtcConfig || {}
-    this.setupPeer()
-  }
-
-  private flushUnsentMessagesQueue () {
-    this.unsentMessagesQueue.forEach((message) => {
-      this.send(message)
-    })
-    this.unsentMessagesQueue.length = 0
+    this.setup()
   }
 
   private responseToKeepAlive () {
-    this.peer.send(KEEP_ALIVE)
     if (!this.timeout || this.timeout > MAX_INT) return
+    this.peer.send(Events.KEEP_ALIVE)
     clearTimeout(this.keepAliveTimeoutId)
-    // the server sends a message every 10 seconds
-    // the client will close if it does not receive a message in 15 seconds after the last was received
-    this.keepAliveTimeoutId = window.setTimeout(this.peer.close(), this.timeout * 1.5)
+    // per the protocol, the server sends a ping every 10 seconds
+    // if it takes more than 5 seconds to receive that ping, something is wrong
+    this.keepAliveTimeoutId = window.setTimeout(this.peer.close.bind(this.peer), this.timeout * 1.5)
   }
 
-  private setupPeer () {
+  protected setup () {
     this.peer = new FastRTCPeer({isOfferer: true, ...this.rtcConfig})
-    this.peer.on(SIGNAL, async (signal) => {
+    this.peer.on(SIGNAL, async (signal: DispatchPayload) => {
       const result = await this.fetchSignalServer(signal)
       if (result) {
         this.peer.dispatch(result)
       }
     })
 
-    this.peer.on(DATA_OPEN, () => {
-      const transportMessage = this.isReconnecting ? TRANSPORT_RECONNECTED : TRANSPORT_CONNECTED
-      if (!this.isReconnecting) {
-        this.canConnect = true
-        this.emit(TRANSPORT_SUPPORTED, true)
-      }
-      this.isReconnecting = false
-      this.backoff.reset()
-      this.flushUnsentMessagesQueue()
-      this.emit(transportMessage)
-    })
+    this.peer.on(DATA_OPEN, this.handleOpen.bind(this))
 
     this.peer.on(ERROR, () => {
       if (this.canConnect === undefined) {
         this.canConnect = false
-        this.emit(TRANSPORT_SUPPORTED, false)
+        this.emit(Events.TRANSPORT_SUPPORTED, false)
       }
     })
 
     this.peer.on(DATA, (data) => {
-      if (data === KEEP_ALIVE) {
+      if (data === Events.KEEP_ALIVE) {
         this.responseToKeepAlive()
       } else {
-        this.emit(DATA, data)
+        this.emit(Events.DATA, data)
       }
     })
 
     this.peer.on(DATA_CLOSE, () => {
-      // if the user or the firewall caused the close, don't reconnect & don't announce the disconnect
-      if (this.isTerminal || !this.canConnect) return
-      if (!this.isReconnecting) {
-        this.emit(TRANSPORT_DISCONNECTED)
+      // auth is taken care of by the signaling server
+      if (!this.canConnect) return
+      if (this.reconnectAttempts === 0) {
+        // only send the message once per disconnect
+        this.emit(Events.TRANSPORT_DISCONNECTED)
       }
       this.tryReconnect()
     })
   }
 
-  private tryReconnect () {
-    if (this.isTerminal) return
-    if (!this.isReconnecting) {
-      this.setupPeer()
-    } else if (!this.reconnectTimeoutId) {
-      this.reconnectTimeoutId = window.setTimeout(() => {
-        this.reconnectTimeoutId = undefined
-        this.setupPeer()
-      }, this.backoff.duration())
-    }
-  }
-
   send (message: Data) {
     if (this.peer.peerConnection.iceConnectionState === 'connected') {
-      // TODO no casting
       this.peer.send(message as DataPayload)
     } else {
-      this.unsentMessagesQueue.push(message)
+      this.messageQueue.add(message)
     }
   }
 
-  close () {
-    this.isTerminal = true
-    this.unsentMessagesQueue.length = 0
-    this.peer.close()
-  }
 
-  async isSupported () {
-    if (this.canConnect !== undefined) return this.canConnect
-    return new Promise<boolean>((resolve) => {
-      super.once(TRANSPORT_SUPPORTED, resolve)
-    })
+  close (reason?: string) {
+    // called by the user, so we know it's intentional
+    this.canConnect = false
+    this.messageQueue.clear()
+    this.peer.close()
+    this.emit(Events.CLOSE, reason)
   }
 }
 
-export default SocketTrebuchet
+export default WRTCTrebuchet

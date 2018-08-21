@@ -1,18 +1,4 @@
-import Backoff from 'backo2'
-import EventEmitter from 'eventemitter3'
-import {
-  CLOSE,
-  CONNECTION_ERROR,
-  DATA,
-  Data,
-  KEEP_ALIVE,
-  MAX_INT, SSE_ID,
-  TRANSPORT_CONNECTED,
-  TRANSPORT_DISCONNECTED,
-  TRANSPORT_RECONNECTED,
-  TRANSPORT_SUPPORTED,
-  TrebuchetEmitter
-} from './getTrebuchet'
+import Trebuchet, {Data, Events, MAX_INT, SSE_ID} from './Trebuchet'
 
 interface MessageEvent {
   data: Data
@@ -28,120 +14,80 @@ export interface SSESettings {
   timeout?: number
 }
 
-class SSETrebuchet extends (EventEmitter as TrebuchetEmitter) {
+class SSETrebuchet extends Trebuchet {
   source!: EventSource
-  private readonly backoff: Backoff = new Backoff({jitter: 0.5, min: 1000})
-  private readonly timeout: number
   private readonly url: string
   private readonly fetchData: FetchData
   private readonly fetchPing: FetchPing
-  private connectionId?: string
-  private unsentMessagesQueue: Array<Data> = []
-  private canConnect: boolean | undefined = undefined
-  private isTerminal: boolean = false
-  private reconnectTimeoutId: number | undefined
-  private keepAliveTimeoutId: number | undefined
-
+  private connectionId: string | undefined = undefined
   constructor (settings: SSESettings) {
-    super()
-    this.timeout = settings.timeout || 10000
+    super(settings)
     this.url = settings.url
     this.fetchData = settings.fetchData
     this.fetchPing = settings.fetchPing
-    this.setupSource()
-  }
-
-  private flushUnsentMessagesQueue () {
-    this.unsentMessagesQueue.forEach((message) => {
-      this.send(message)
-    })
-    this.unsentMessagesQueue.length = 0
+    this.setup()
   }
 
   private responseToKeepAlive = () => {
     if (!this.connectionId || !this.timeout || this.timeout > MAX_INT) return
     this.fetchPing(this.connectionId).catch()
     clearTimeout(this.keepAliveTimeoutId)
-    // the server sends a message every 10 seconds
-    // the client will close if it does not receive a message in 15 seconds after the last was received
     this.keepAliveTimeoutId = window.setTimeout(this.source.close(), this.timeout * 1.5)
   }
 
-  private setupSource = () => {
+  protected setup = () => {
     this.source = new EventSource(this.url)
-    this.source.onopen = () => {
-      const transportMessage = this.reconnectTimeoutId ? TRANSPORT_RECONNECTED : TRANSPORT_CONNECTED
-      if (!this.reconnectTimeoutId) {
-        this.canConnect = true
-        this.emit(TRANSPORT_SUPPORTED, true)
-      }
-      this.reconnectTimeoutId = undefined
-      this.backoff.reset()
-      this.flushUnsentMessagesQueue()
-      this.emit(transportMessage)
-    }
+    this.source.onopen = this.handleOpen.bind(this)
 
     this.source.onerror = () => {
+      this.connectionId = undefined
       if (this.canConnect === undefined) {
         this.canConnect = false
-        this.emit(TRANSPORT_SUPPORTED, false)
-      } else if (this.canConnect && !this.isTerminal) {
-        if (!this.reconnectTimeoutId) {
-          this.emit(TRANSPORT_DISCONNECTED)
+        // keep it from reconnecting
+        this.source.close()
+        this.emit(Events.TRANSPORT_SUPPORTED, false)
+      } else if (this.canConnect) {
+        if (this.reconnectAttempts === 0) {
+          // only send the message once per disconnect
+          this.emit(Events.TRANSPORT_DISCONNECTED)
         }
-        this.tryReconnect()
+        // EventSources have a built-in retry protocol, we'll just use that
+        this.reconnectAttempts++
       }
     }
 
-    this.source.addEventListener(KEEP_ALIVE, this.responseToKeepAlive)
+    this.source.addEventListener(Events.KEEP_ALIVE, this.responseToKeepAlive)
     this.source.addEventListener(SSE_ID, (event: any) => {
       this.connectionId = event.data
-      this.flushUnsentMessagesQueue()
+      this.messageQueue.flush(this.send)
     })
-    this.source.addEventListener(CONNECTION_ERROR, (event: any) => {
-      this.close(event.data as string)
-    })
-    this.source.onmessage = (event: MessageEvent) => {
-      this.emit(DATA, event.data)
-    }
-  }
 
-  private tryReconnect () {
-    if (this.isTerminal) return
-    if (!this.reconnectTimeoutId) {
-      this.reconnectTimeoutId = window.setTimeout(() => {
-        this.setupSource()
-      }, this.backoff.duration())
+    this.source.onmessage = (event: MessageEvent) => {
+      this.emit(Events.DATA, event.data)
     }
   }
 
   private handleFetch = async (message: Data) => {
     const res = await this.fetchData(message, this.connectionId!)
     if (res) {
-      this.emit(DATA, res)
+      this.emit(Events.DATA, res)
     }
   }
 
-  send (message: Data) {
+  send = (message: Data) => {
     if (this.source.readyState === this.source.OPEN && this.connectionId) {
       this.handleFetch(message).catch()
     } else {
-      this.unsentMessagesQueue.push(message)
+      this.messageQueue.add(message)
     }
   }
 
   close (reason?: string) {
-    this.isTerminal = true
-    this.unsentMessagesQueue.length = 0
+    // called by the user, so we know it's intentional
+    this.canConnect = false
+    this.messageQueue.clear()
     this.source.close()
-    this.emit(CLOSE, reason)
-  }
-
-  async isSupported () {
-    if (this.canConnect !== undefined) return this.canConnect
-    return new Promise<boolean>((resolve) => {
-      super.once(TRANSPORT_SUPPORTED, resolve)
-    })
+    this.emit(Events.CLOSE, reason)
   }
 }
 
