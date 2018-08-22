@@ -1,6 +1,6 @@
 {
   "name": "@mattkrick/trebuchet-client",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A friendly siege weapon to get 2-way communication through tough firewalls and bad mobile networks",
   "author": "Matt Krick <matt.krick@gmail.com>",
   "main": "dist/index.js",
