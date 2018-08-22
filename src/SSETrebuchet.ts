@@ -53,7 +53,13 @@ class SSETrebuchet extends Trebuchet {
       if (!this.connectionId || !this.timeout || this.timeout > MAX_INT) return
       this.fetchPing(this.connectionId).catch()
       clearTimeout(this.keepAliveTimeoutId)
-      this.keepAliveTimeoutId = window.setTimeout(this.source.close.bind(this.source), this.timeout * 1.5)
+      this.keepAliveTimeoutId = window.setTimeout(() => {
+        this.keepAliveTimeoutId = undefined
+        this.source.close()
+        this.emit(Events.TRANSPORT_DISCONNECTED)
+        this.reconnectAttempts++
+        this.setup()
+      }, this.timeout * 1.5)
     })
 
     this.source.addEventListener(SSE_ID, (event: any) => {

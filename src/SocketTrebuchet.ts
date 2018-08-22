@@ -25,7 +25,10 @@ class SocketTrebuchet extends Trebuchet {
     clearTimeout(this.keepAliveTimeoutId)
     // per the protocol, the server sends a ping every 10 seconds
     // if it takes more than 5 seconds to receive that ping, something is wrong
-    this.keepAliveTimeoutId = window.setTimeout(this.ws.close.bind(this.ws), this.timeout * 1.5)
+    this.keepAliveTimeoutId = window.setTimeout(() => {
+      this.keepAliveTimeoutId = undefined
+      this.ws.close()
+    }, this.timeout * 1.5)
   }
 
   protected setup () {
