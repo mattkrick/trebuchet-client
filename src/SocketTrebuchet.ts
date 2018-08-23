@@ -68,7 +68,7 @@ class SocketTrebuchet extends Trebuchet {
     }
   }
 
-  send (message: Data) {
+  send = (message: Data) => {
     if (this.ws.readyState === this.ws.OPEN) {
       this.ws.send(message)
     } else {
