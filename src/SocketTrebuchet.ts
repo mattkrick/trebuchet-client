@@ -1,4 +1,4 @@
-import Trebuchet, {Data, Events, MAX_INT, TREBUCHET_WS} from './Trebuchet'
+import Trebuchet, {Data, Events, TREBUCHET_WS} from './Trebuchet'
 
 interface MessageEvent {
   data: Data
@@ -12,6 +12,7 @@ export interface WSSettings {
 class SocketTrebuchet extends Trebuchet {
   ws!: WebSocket
   private readonly url: string
+  private lastKeepAlive = Date.now()
 
   constructor (settings: WSSettings) {
     super(settings)
@@ -19,15 +20,17 @@ class SocketTrebuchet extends Trebuchet {
     this.setup()
   }
 
-  private responseToKeepAlive () {
-    if (!this.timeout || this.timeout > MAX_INT) return
-    this.ws.send(Events.KEEP_ALIVE)
+  private keepAlive () {
+    const now = Date.now()
+    // no need to start a new timeout if we just started one
+    if (this.lastKeepAlive > now - this.timeout / 10) return
+    this.lastKeepAlive = now
     clearTimeout(this.keepAliveTimeoutId)
     // per the protocol, the server sends a ping every 10 seconds
     // if it takes more than 5 seconds to receive that ping, something is wrong
     this.keepAliveTimeoutId = window.setTimeout(() => {
       this.keepAliveTimeoutId = undefined
-      this.ws.close()
+      this.ws.close(1000)
     }, this.timeout * 1.5)
   }
 
@@ -38,10 +41,11 @@ class SocketTrebuchet extends Trebuchet {
     this.ws.onmessage = (event: MessageEvent) => {
       const {data} = event
       if (data === Events.KEEP_ALIVE) {
-        this.responseToKeepAlive()
+        this.ws.send(Events.KEEP_ALIVE)
       } else {
         this.emit(Events.DATA, data)
       }
+      this.keepAlive()
     }
 
     this.ws.onerror = () => {
