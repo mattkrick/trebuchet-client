@@ -51,7 +51,7 @@ const trebuchets = [
   },
   () => {
     const fetchSignalServer = (signal) => fetch(`/rtc`, {method: 'POST', body: JSON.stringify(signal)})
-    return new WRTCTrebuchet({fetchSignalServer}) 
+    return new WRTCTrebuchet({fetchSignalServer})
   }
 ]
 
@@ -67,6 +67,11 @@ const siege = async () => {
     })
     trebuchet.on('reconnected', () => {
       console.log('but our bond cannot be broken')
+    })
+    trebuchet.on('close', ({code, reason, isClientClose}) => {
+      if (!isClientClose) {
+        console.log(`I lied. It's not you, it's the server: ${reason}`)
+      }
     })
   } else {
     console.log('the siege failed, try adding more trebuchets!')

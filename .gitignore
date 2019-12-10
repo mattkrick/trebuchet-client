@@ -1,5 +1,6 @@
 node_modules
 .DS_Store
+.history
 coverage
 typings
 npm-debug.log

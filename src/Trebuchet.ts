@@ -13,22 +13,29 @@ export enum Events {
   TRANSPORT_SUPPORTED = 'supported',
   TRANSPORT_CONNECTED = 'connected',
   TRANSPORT_RECONNECTED = 'reconnected',
-  TRANSPORT_DISCONNECTED = 'disconnected',
+  TRANSPORT_DISCONNECTED = 'disconnected'
+}
+
+interface ClosePayload {
+  code?: number
+  reason?: string
+  isClientClose: boolean
 }
 
 interface TrebuchetEvents {
-  [Events.CLOSE]: string | undefined,
-  [Events.DATA]: Data | object,
-  [Events.KEEP_ALIVE]: void,
-  [Events.TRANSPORT_CONNECTED]: void,
-  [Events.TRANSPORT_RECONNECTED]: void,
-  [Events.TRANSPORT_DISCONNECTED]: void,
-  [Events.TRANSPORT_SUPPORTED]: boolean,
+  [Events.CLOSE]: ClosePayload
+  [Events.DATA]: Data | object
+  [Events.KEEP_ALIVE]: void
+  [Events.TRANSPORT_CONNECTED]: void
+  [Events.TRANSPORT_RECONNECTED]: void
+  [Events.TRANSPORT_DISCONNECTED]: void
+  [Events.TRANSPORT_SUPPORTED]: boolean
 }
 
 export const MAX_INT = 2 ** 31 - 1
 export const TREBUCHET_WS = 'trebuchet-ws'
 export const SSE_ID = 'id'
+export const SSE_CLOSE_EVENT = 'close'
 
 export type Data = string | ArrayBufferLike | Blob | ArrayBufferView
 
@@ -49,7 +56,7 @@ abstract class Trebuchet extends (EventEmitter as TrebuchetEmitter) {
     this.messageQueue = new MessageQueue()
   }
 
-  abstract close(reason?: string): void
+  abstract close (reason?: string): void
   abstract send (message: Data): void
 
   protected abstract setup (): void

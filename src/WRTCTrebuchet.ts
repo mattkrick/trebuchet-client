@@ -83,13 +83,12 @@ class WRTCTrebuchet extends Trebuchet {
     }
   }
 
-
   close (reason?: string) {
     // called by the user, so we know it's intentional
     this.canConnect = false
     this.messageQueue.clear()
     this.peer.close()
-    this.emit(Events.CLOSE, reason)
+    this.emit(Events.CLOSE, {code: 1000, reason, isClientClose: true})
   }
 }
 

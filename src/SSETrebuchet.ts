@@ -1,4 +1,4 @@
-import Trebuchet, {Data, Events, MAX_INT, SSE_ID} from './Trebuchet'
+import Trebuchet, {Data, Events, MAX_INT, SSE_ID, SSE_CLOSE_EVENT} from './Trebuchet'
 
 interface MessageEvent {
   data: Data
@@ -67,6 +67,14 @@ class SSETrebuchet extends Trebuchet {
       this.messageQueue.flush(this.send)
     })
 
+    this.source.addEventListener(SSE_CLOSE_EVENT, (event: any) => {
+      const splitIdx = event.data.indexOf(':')
+      const code = event.data.slice(0, splitIdx)
+      const reason = event.data.slice(splitIdx + 1)
+      this.emit(Events.CLOSE, {code, reason, isClientClose: false})
+      this.source.close()
+    })
+
     this.source.onmessage = (event: MessageEvent) => {
       this.emit(Events.DATA, event.data)
     }
@@ -92,7 +100,7 @@ class SSETrebuchet extends Trebuchet {
     this.canConnect = false
     this.messageQueue.clear()
     this.source.close()
-    this.emit(Events.CLOSE, reason)
+    this.emit(Events.CLOSE, {code: 1000, reason, isClientClose: true})
   }
 }
 

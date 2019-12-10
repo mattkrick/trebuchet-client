@@ -13,6 +13,7 @@ class SocketTrebuchet extends Trebuchet {
   ws!: WebSocket
   private readonly url: string
   private lastKeepAlive = Date.now()
+  private isClientClose?: boolean
 
   constructor (settings: WSSettings) {
     super(settings)
@@ -57,18 +58,20 @@ class SocketTrebuchet extends Trebuchet {
 
     this.ws.onclose = (event: CloseEvent) => {
       // if the user or the firewall caused the close, don't reconnect & don't announce the disconnect
-      const {code} = event
+      const {code, reason} = event
 
       if (code === 1002 || code === 1011) {
         // protocol/auth errors are signs of malicious actors
         this.canConnect = false
       }
-      if (!this.canConnect) return
-      if (this.reconnectAttempts === 0) {
-        // only send the message once per disconnect
-        this.emit(Events.TRANSPORT_DISCONNECTED)
+      this.emit(Events.CLOSE, {code, reason, isClientClose: !!this.isClientClose})
+      if (this.canConnect) {
+        if (this.reconnectAttempts === 0) {
+          // only send the message once per disconnect
+          this.emit(Events.TRANSPORT_DISCONNECTED)
+        }
+        this.tryReconnect()
       }
-      this.tryReconnect()
     }
   }
 
@@ -82,10 +85,10 @@ class SocketTrebuchet extends Trebuchet {
 
   close (reason?: string) {
     // called by the user, so we know it's intentional
+    this.isClientClose = true
     this.canConnect = false
     this.messageQueue.clear()
     this.ws.close(1000, reason)
-    this.emit(Events.CLOSE, reason)
   }
 }
 
