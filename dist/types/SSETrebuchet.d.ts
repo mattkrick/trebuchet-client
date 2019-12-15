@@ -1,11 +1,10 @@
-import Trebuchet, { Data } from './Trebuchet';
-export declare type FetchData = (data: any, connectionId: string) => Promise<Response>;
+import Trebuchet, { Data, TrebuchetSettings } from './Trebuchet';
+export declare type FetchData = (data: any, connectionId: string) => Promise<Data>;
 export declare type FetchPing = (connectionId: string) => Promise<Response>;
-export interface SSESettings {
+export interface SSESettings extends TrebuchetSettings {
     url: string;
     fetchData: FetchData;
     fetchPing: FetchPing;
-    timeout?: number;
 }
 declare class SSETrebuchet extends Trebuchet {
     source: EventSource;

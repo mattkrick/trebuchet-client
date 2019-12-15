@@ -4,16 +4,7 @@ import StrictEventEmitter from 'strict-event-emitter-types'
 
 export interface TrebuchetSettings {
   timeout?: number
-}
-
-export enum Events {
-  KEEP_ALIVE = 'ka',
-  DATA = 'data',
-  CLOSE = 'close',
-  TRANSPORT_SUPPORTED = 'supported',
-  TRANSPORT_CONNECTED = 'connected',
-  TRANSPORT_RECONNECTED = 'reconnected',
-  TRANSPORT_DISCONNECTED = 'disconnected'
+  batchDelay?: number
 }
 
 interface ClosePayload {
@@ -23,52 +14,46 @@ interface ClosePayload {
 }
 
 interface TrebuchetEvents {
-  [Events.CLOSE]: ClosePayload
-  [Events.DATA]: Data | object
-  [Events.KEEP_ALIVE]: void
-  [Events.TRANSPORT_CONNECTED]: void
-  [Events.TRANSPORT_RECONNECTED]: void
-  [Events.TRANSPORT_DISCONNECTED]: void
-  [Events.TRANSPORT_SUPPORTED]: boolean
+  close: ClosePayload
+  data: object | string | boolean | number
+  connected: void
+  reconnected: void
+  disconnected: void
+  supported: boolean
 }
 
-export const MAX_INT = 2 ** 31 - 1
-export const TREBUCHET_WS = 'trebuchet-ws'
-export const SSE_ID = 'id'
-export const SSE_CLOSE_EVENT = 'close'
-
-export type Data = string | ArrayBufferLike | Blob | ArrayBufferView
+export type Data = string | ArrayBufferLike
 
 export type TrebuchetEmitter = {new (): StrictEventEmitter<EventEmitter, TrebuchetEvents>}
 
 abstract class Trebuchet extends (EventEmitter as TrebuchetEmitter) {
   protected readonly backoff: Array<number> = [1000, 2000, 5000, 10000]
   protected readonly timeout: number
-  protected messageQueue: MessageQueue
+  protected readonly batchDelay: number
+  protected messageQueue = new MessageQueue()
   protected canConnect: boolean | undefined = undefined
-  protected reconnectAttempts: number = 0
+  protected reconnectAttempts = 0
   protected reconnectTimeoutId: number | undefined
   protected keepAliveTimeoutId: number | undefined
-
   constructor (settings: TrebuchetSettings) {
     super()
     this.timeout = settings.timeout || 10000
-    this.messageQueue = new MessageQueue()
+    this.batchDelay = settings.batchDelay ?? -1
   }
 
   abstract close (reason?: string): void
-  abstract send (message: Data): void
+  abstract send (message: any): void
 
   protected abstract setup (): void
 
   protected handleOpen = () => {
     if (this.reconnectAttempts === 0) {
       this.canConnect = true
-      this.emit(Events.TRANSPORT_SUPPORTED, true)
-      this.emit(Events.TRANSPORT_CONNECTED)
+      this.emit('supported', true)
+      this.emit('connected')
     } else {
       this.reconnectAttempts = 0
-      this.emit(Events.TRANSPORT_RECONNECTED)
+      this.emit('reconnected')
     }
     this.messageQueue.flush(this.send)
   }
@@ -89,7 +74,7 @@ abstract class Trebuchet extends (EventEmitter as TrebuchetEmitter) {
   async isSupported () {
     if (this.canConnect !== undefined) return this.canConnect
     return new Promise<boolean>((resolve) => {
-      this.once(Events.TRANSPORT_SUPPORTED, resolve)
+      this.once('supported', resolve)
     })
   }
 }

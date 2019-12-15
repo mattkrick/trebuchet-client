@@ -10,12 +10,12 @@ Because "IT professionals" who believe they can secure their company by blocking
 
 - Establishes a 2-way communication with a client no matter what
 - Uses a heartbeat to keep the connection open
-- Creates a new connection if a firewall ends a long-running connection
+- Creates a new connection if a firewall ends a long-running connection or the server restarts
 - Queues unsent messages
 - Provides a clean API to let the user know they've been disconnected or reconnected
-- Supports WebSockets, WebRTC, and SSE. SSE will always work (see [Browser Support](#browser-support))
+- Supports WebSockets, WebRTC, and SSE. SSE will always work (barring a MITM attack). See [Browser Support](#browser-support)
 - Uses thunks for tree-shaking so you don't import trebuchets that you don't use
-- Supports buffers, in case you don't want to use simple, understandable JSON
+- Supports custom encoding (ie binary data) where possible (SSE does not support binary)
 
 ## Installation
 
@@ -24,7 +24,7 @@ Because "IT professionals" who believe they can secure their company by blocking
 ## API
 
 - `getTrebuchet(thunks)`: given an array of trebuchets, it tries them in order & returns the first that works
-- `SocketTrebuchet({url})`: a constructor to establish a websocket connection
+- `SocketTrebuchet({url, encode, decode, batchDelay})`: a constructor to establish a websocket connection
 - `SSETrebuchet({url, fetchData, fethcPing})`: a constructor to establish server-sent events
 - `WRTCTrebuchet({url, fetchSignalServer})`: a constructor to establish a peer connection with the server
 
@@ -35,7 +35,7 @@ import getTrebuchet, {SocketTrebuchet, SSETrebuchet, WRTCTrebuchet} from '@mattk
 
 
 const trebuchets = [
-  () => new SocketTrebuchet({url: 'wss://my-server.co'}),
+  () => new SocketTrebuchet({url: 'wss://my-server.co', enocde: msgpack.encode, decode: msgpack.decode, batchDelay: 10}),
   () => {
     const url = 'https://my-server.co'
     const fetchPing = (connectionId) => fetch(`/sse/?ping=true&id=${connectionId}`)

@@ -1,10 +1,9 @@
 import FastRTCPeer, { DispatchPayload } from '@mattkrick/fast-rtc-peer';
-import Trebuchet, { Data } from './Trebuchet';
+import Trebuchet, { Data, TrebuchetSettings } from './Trebuchet';
 export declare type FetchSignalServer = (signal: DispatchPayload) => Promise<DispatchPayload | null>;
-export interface WRTCSettings {
+export interface WRTCSettings extends TrebuchetSettings {
     fetchSignalServer: FetchSignalServer;
     rtcConfig: RTCConfiguration;
-    timeout?: number;
 }
 declare class WRTCTrebuchet extends Trebuchet {
     peer: FastRTCPeer;

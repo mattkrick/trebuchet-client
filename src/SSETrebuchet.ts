@@ -1,18 +1,14 @@
-import Trebuchet, {Data, Events, MAX_INT, SSE_ID, SSE_CLOSE_EVENT} from './Trebuchet'
+import Trebuchet, {Data, TrebuchetSettings} from './Trebuchet'
 
-interface MessageEvent {
-  data: Data
-}
-
-export type FetchData = (data: any, connectionId: string) => Promise<Response>
+export type FetchData = (data: any, connectionId: string) => Promise<Data>
 export type FetchPing = (connectionId: string) => Promise<Response>
 
-export interface SSESettings {
+export interface SSESettings extends TrebuchetSettings {
   url: string
   fetchData: FetchData
   fetchPing: FetchPing
-  timeout?: number
 }
+const MAX_INT = 2 ** 31 - 1
 
 class SSETrebuchet extends Trebuchet {
   source!: EventSource
@@ -38,52 +34,52 @@ class SSETrebuchet extends Trebuchet {
         this.canConnect = false
         // keep it from reconnecting
         this.source.close()
-        this.emit(Events.TRANSPORT_SUPPORTED, false)
+        this.emit('supported', false)
       } else if (this.canConnect) {
         if (this.reconnectAttempts === 0) {
           // only send the message once per disconnect
-          this.emit(Events.TRANSPORT_DISCONNECTED)
+          this.emit('disconnected')
         }
         // EventSources have a built-in retry protocol, we'll just use that
         this.reconnectAttempts++
       }
     }
 
-    this.source.addEventListener(Events.KEEP_ALIVE, () => {
+    this.source.addEventListener('ka', () => {
       if (!this.connectionId || !this.timeout || this.timeout > MAX_INT) return
       this.fetchPing(this.connectionId).catch()
       clearTimeout(this.keepAliveTimeoutId)
       this.keepAliveTimeoutId = window.setTimeout(() => {
         this.keepAliveTimeoutId = undefined
         this.source.close()
-        this.emit(Events.TRANSPORT_DISCONNECTED)
+        this.emit('disconnected')
         this.reconnectAttempts++
         this.setup()
       }, this.timeout * 1.5)
     })
 
-    this.source.addEventListener(SSE_ID, (event: any) => {
+    this.source.addEventListener('id', (event: any) => {
       this.connectionId = event.data
       this.messageQueue.flush(this.send)
     })
 
-    this.source.addEventListener(SSE_CLOSE_EVENT, (event: any) => {
+    this.source.addEventListener('close', (event: any) => {
       const splitIdx = event.data.indexOf(':')
       const code = event.data.slice(0, splitIdx)
       const reason = event.data.slice(splitIdx + 1)
-      this.emit(Events.CLOSE, {code, reason, isClientClose: false})
+      this.emit('close', {code, reason, isClientClose: false})
       this.source.close()
     })
 
     this.source.onmessage = (event: MessageEvent) => {
-      this.emit(Events.DATA, event.data)
+      this.emit('data', JSON.parse(event.data))
     }
   }
 
   private handleFetch = async (message: Data) => {
     const res = await this.fetchData(message, this.connectionId!)
     if (res) {
-      this.emit(Events.DATA, res)
+      this.emit('data', res)
     }
   }
 
@@ -96,11 +92,12 @@ class SSETrebuchet extends Trebuchet {
   }
 
   close (reason?: string) {
+    if (this.source.CLOSED) return
     // called by the user, so we know it's intentional
     this.canConnect = false
     this.messageQueue.clear()
     this.source.close()
-    this.emit(Events.CLOSE, {code: 1000, reason, isClientClose: true})
+    this.emit('close', {code: 1000, reason, isClientClose: true})
   }
 }
 

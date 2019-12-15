@@ -130,6 +130,7 @@ class MessageQueue {
 __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _Trebuchet__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./Trebuchet */ "./src/Trebuchet.ts");
 
+const MAX_INT = 2 ** 31 - 1;
 class SSETrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"] {
     constructor(settings) {
         super(settings);
@@ -142,47 +143,47 @@ class SSETrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"] {
                 if (this.canConnect === undefined) {
                     this.canConnect = false;
                     this.source.close();
-                    this.emit(_Trebuchet__WEBPACK_IMPORTED_MODULE_0__["Events"].TRANSPORT_SUPPORTED, false);
+                    this.emit('supported', false);
                 }
                 else if (this.canConnect) {
                     if (this.reconnectAttempts === 0) {
-                        this.emit(_Trebuchet__WEBPACK_IMPORTED_MODULE_0__["Events"].TRANSPORT_DISCONNECTED);
+                        this.emit('disconnected');
                     }
                     this.reconnectAttempts++;
                 }
             };
-            this.source.addEventListener(_Trebuchet__WEBPACK_IMPORTED_MODULE_0__["Events"].KEEP_ALIVE, () => {
-                if (!this.connectionId || !this.timeout || this.timeout > _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["MAX_INT"])
+            this.source.addEventListener('ka', () => {
+                if (!this.connectionId || !this.timeout || this.timeout > MAX_INT)
                     return;
                 this.fetchPing(this.connectionId).catch();
                 clearTimeout(this.keepAliveTimeoutId);
                 this.keepAliveTimeoutId = window.setTimeout(() => {
                     this.keepAliveTimeoutId = undefined;
                     this.source.close();
-                    this.emit(_Trebuchet__WEBPACK_IMPORTED_MODULE_0__["Events"].TRANSPORT_DISCONNECTED);
+                    this.emit('disconnected');
                     this.reconnectAttempts++;
                     this.setup();
                 }, this.timeout * 1.5);
             });
-            this.source.addEventListener(_Trebuchet__WEBPACK_IMPORTED_MODULE_0__["SSE_ID"], (event) => {
+            this.source.addEventListener('id', (event) => {
                 this.connectionId = event.data;
                 this.messageQueue.flush(this.send);
             });
-            this.source.addEventListener(_Trebuchet__WEBPACK_IMPORTED_MODULE_0__["SSE_CLOSE_EVENT"], (event) => {
+            this.source.addEventListener('close', (event) => {
                 const splitIdx = event.data.indexOf(':');
                 const code = event.data.slice(0, splitIdx);
                 const reason = event.data.slice(splitIdx + 1);
-                this.emit(_Trebuchet__WEBPACK_IMPORTED_MODULE_0__["Events"].CLOSE, { code, reason, isClientClose: false });
+                this.emit('close', { code, reason, isClientClose: false });
                 this.source.close();
             });
             this.source.onmessage = (event) => {
-                this.emit(_Trebuchet__WEBPACK_IMPORTED_MODULE_0__["Events"].DATA, event.data);
+                this.emit('data', JSON.parse(event.data));
             };
         };
         this.handleFetch = async (message) => {
             const res = await this.fetchData(message, this.connectionId);
             if (res) {
-                this.emit(_Trebuchet__WEBPACK_IMPORTED_MODULE_0__["Events"].DATA, res);
+                this.emit('data', res);
             }
         };
         this.send = (message) => {
@@ -199,10 +200,12 @@ class SSETrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"] {
         this.setup();
     }
     close(reason) {
+        if (this.source.CLOSED)
+            return;
         this.canConnect = false;
         this.messageQueue.clear();
         this.source.close();
-        this.emit(_Trebuchet__WEBPACK_IMPORTED_MODULE_0__["Events"].CLOSE, { code: 1000, reason, isClientClose: true });
+        this.emit('close', { code: 1000, reason, isClientClose: true });
     }
 }
 /* harmony default export */ __webpack_exports__["default"] = (SSETrebuchet);
@@ -214,25 +217,52 @@ class SSETrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"] {
 /*!********************************!*\
   !*** ./src/SocketTrebuchet.ts ***!
   \********************************/
-/*! exports provided: default */
+/*! exports provided: TREBUCHET_WS, default */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
 __webpack_require__.r(__webpack_exports__);
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "TREBUCHET_WS", function() { return TREBUCHET_WS; });
 /* harmony import */ var _Trebuchet__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./Trebuchet */ "./src/Trebuchet.ts");
 
+const PING = 57;
+const PONG = new Uint8Array([65]);
+const TREBUCHET_WS = 'trebuchet-ws';
+const isPing = (data) => {
+    if (typeof data === 'string')
+        return false;
+    const buffer = new Uint8Array(data);
+    return buffer.length === 1 && buffer[0] === PING;
+};
 class SocketTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"] {
     constructor(settings) {
         super(settings);
         this.lastKeepAlive = Date.now();
         this.send = (message) => {
-            if (this.ws.readyState === this.ws.OPEN) {
-                this.ws.send(message);
+            if (this.batchDelay === -1) {
+                if (this.ws.readyState === this.ws.OPEN) {
+                    this.ws.send(this.encode(message));
+                }
+                else {
+                    this.messageQueue.add(message);
+                }
             }
             else {
                 this.messageQueue.add(message);
+                if (!this.mqTimer) {
+                    this.mqTimer = window.setTimeout(() => {
+                        this.mqTimer = undefined;
+                        if (this.ws.readyState === this.ws.OPEN) {
+                            this.ws.send(this.encode(this.messageQueue.queue));
+                            this.messageQueue.clear();
+                        }
+                    }, this.batchDelay);
+                }
             }
         };
+        const { decode, encode } = settings;
+        this.encode = encode || JSON.stringify;
+        this.decode = decode || JSON.parse;
         this.url = settings.url;
         this.setup();
     }
@@ -244,43 +274,47 @@ class SocketTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"]
         clearTimeout(this.keepAliveTimeoutId);
         this.keepAliveTimeoutId = window.setTimeout(() => {
             this.keepAliveTimeoutId = undefined;
-            this.ws.close(1000);
+            this.ws.close(1000, 'ping timeout');
         }, this.timeout * 1.5);
     }
     setup() {
-        this.ws = new WebSocket(this.url, _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["TREBUCHET_WS"]);
+        this.ws = new WebSocket(this.url, TREBUCHET_WS);
+        this.ws.binaryType = 'arraybuffer';
         this.ws.onopen = this.handleOpen.bind(this);
         this.ws.onmessage = (event) => {
             const { data } = event;
-            if (data === _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["Events"].KEEP_ALIVE) {
-                this.ws.send(_Trebuchet__WEBPACK_IMPORTED_MODULE_0__["Events"].KEEP_ALIVE);
+            if (isPing(data)) {
+                this.ws.send(PONG);
             }
             else {
-                this.emit(_Trebuchet__WEBPACK_IMPORTED_MODULE_0__["Events"].DATA, data);
+                this.emit('data', this.decode(data));
             }
             this.keepAlive();
         };
         this.ws.onerror = () => {
             if (this.canConnect === undefined) {
                 this.canConnect = false;
-                this.emit(_Trebuchet__WEBPACK_IMPORTED_MODULE_0__["Events"].TRANSPORT_SUPPORTED, false);
+                this.emit('supported', false);
             }
         };
         this.ws.onclose = (event) => {
             const { code, reason } = event;
-            if (code === 1002 || code === 1011) {
+            const isClientClose = !!this.isClientClose;
+            if (!isClientClose) {
                 this.canConnect = false;
             }
-            this.emit(_Trebuchet__WEBPACK_IMPORTED_MODULE_0__["Events"].CLOSE, { code, reason, isClientClose: !!this.isClientClose });
+            this.emit('close', { code, reason, isClientClose });
             if (this.canConnect) {
                 if (this.reconnectAttempts === 0) {
-                    this.emit(_Trebuchet__WEBPACK_IMPORTED_MODULE_0__["Events"].TRANSPORT_DISCONNECTED);
+                    this.emit('disconnected');
                 }
                 this.tryReconnect();
             }
         };
     }
     close(reason) {
+        if (this.ws.readyState === this.ws.CLOSED)
+            return;
         this.isClientClose = true;
         this.canConnect = false;
         this.messageQueue.clear();
@@ -296,55 +330,38 @@ class SocketTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"]
 /*!**************************!*\
   !*** ./src/Trebuchet.ts ***!
   \**************************/
-/*! exports provided: Events, MAX_INT, TREBUCHET_WS, SSE_ID, SSE_CLOSE_EVENT, default */
+/*! exports provided: default */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
 __webpack_require__.r(__webpack_exports__);
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Events", function() { return Events; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "MAX_INT", function() { return MAX_INT; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "TREBUCHET_WS", function() { return TREBUCHET_WS; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "SSE_ID", function() { return SSE_ID; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "SSE_CLOSE_EVENT", function() { return SSE_CLOSE_EVENT; });
 /* harmony import */ var eventemitter3__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! eventemitter3 */ "eventemitter3");
 /* harmony import */ var eventemitter3__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(eventemitter3__WEBPACK_IMPORTED_MODULE_0__);
 /* harmony import */ var _MessageQueue__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./MessageQueue */ "./src/MessageQueue.ts");
 
 
-var Events;
-(function (Events) {
-    Events["KEEP_ALIVE"] = "ka";
-    Events["DATA"] = "data";
-    Events["CLOSE"] = "close";
-    Events["TRANSPORT_SUPPORTED"] = "supported";
-    Events["TRANSPORT_CONNECTED"] = "connected";
-    Events["TRANSPORT_RECONNECTED"] = "reconnected";
-    Events["TRANSPORT_DISCONNECTED"] = "disconnected";
-})(Events || (Events = {}));
-const MAX_INT = 2 ** 31 - 1;
-const TREBUCHET_WS = 'trebuchet-ws';
-const SSE_ID = 'id';
-const SSE_CLOSE_EVENT = 'close';
 class Trebuchet extends eventemitter3__WEBPACK_IMPORTED_MODULE_0___default.a {
     constructor(settings) {
+        var _a;
         super();
         this.backoff = [1000, 2000, 5000, 10000];
+        this.messageQueue = new _MessageQueue__WEBPACK_IMPORTED_MODULE_1__["default"]();
         this.canConnect = undefined;
         this.reconnectAttempts = 0;
         this.handleOpen = () => {
             if (this.reconnectAttempts === 0) {
                 this.canConnect = true;
-                this.emit(Events.TRANSPORT_SUPPORTED, true);
-                this.emit(Events.TRANSPORT_CONNECTED);
+                this.emit('supported', true);
+                this.emit('connected');
             }
             else {
                 this.reconnectAttempts = 0;
-                this.emit(Events.TRANSPORT_RECONNECTED);
+                this.emit('reconnected');
             }
             this.messageQueue.flush(this.send);
         };
         this.timeout = settings.timeout || 10000;
-        this.messageQueue = new _MessageQueue__WEBPACK_IMPORTED_MODULE_1__["default"]();
+        this.batchDelay = (_a = settings.batchDelay, (_a !== null && _a !== void 0 ? _a : -1));
     }
     tryReconnect() {
         if (!this.canConnect)
@@ -363,7 +380,7 @@ class Trebuchet extends eventemitter3__WEBPACK_IMPORTED_MODULE_0___default.a {
         if (this.canConnect !== undefined)
             return this.canConnect;
         return new Promise((resolve) => {
-            this.once(Events.TRANSPORT_SUPPORTED, resolve);
+            this.once('supported', resolve);
         });
     }
 }
@@ -386,6 +403,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _Trebuchet__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./Trebuchet */ "./src/Trebuchet.ts");
 
 
+const MAX_INT = 2 ** 31 - 1;
 class WRTCTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_1__["default"] {
     constructor(settings) {
         super(settings);
@@ -394,9 +412,9 @@ class WRTCTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_1__["default"] {
         this.setup();
     }
     responseToKeepAlive() {
-        if (!this.timeout || this.timeout > _Trebuchet__WEBPACK_IMPORTED_MODULE_1__["MAX_INT"])
+        if (!this.timeout || this.timeout > MAX_INT)
             return;
-        this.peer.send(_Trebuchet__WEBPACK_IMPORTED_MODULE_1__["Events"].KEEP_ALIVE);
+        this.peer.send('ka');
         clearTimeout(this.keepAliveTimeoutId);
         this.keepAliveTimeoutId = window.setTimeout(this.peer.close.bind(this.peer), this.timeout * 1.5);
     }
@@ -412,22 +430,22 @@ class WRTCTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_1__["default"] {
         this.peer.on(_mattkrick_fast_rtc_peer__WEBPACK_IMPORTED_MODULE_0__["ERROR"], () => {
             if (this.canConnect === undefined) {
                 this.canConnect = false;
-                this.emit(_Trebuchet__WEBPACK_IMPORTED_MODULE_1__["Events"].TRANSPORT_SUPPORTED, false);
+                this.emit('supported', false);
             }
         });
         this.peer.on(_mattkrick_fast_rtc_peer__WEBPACK_IMPORTED_MODULE_0__["DATA"], (data) => {
-            if (data === _Trebuchet__WEBPACK_IMPORTED_MODULE_1__["Events"].KEEP_ALIVE) {
+            if (data === 'ka') {
                 this.responseToKeepAlive();
             }
             else {
-                this.emit(_Trebuchet__WEBPACK_IMPORTED_MODULE_1__["Events"].DATA, data);
+                this.emit('data', data);
             }
         });
         this.peer.on(_mattkrick_fast_rtc_peer__WEBPACK_IMPORTED_MODULE_0__["DATA_CLOSE"], () => {
             if (!this.canConnect)
                 return;
             if (this.reconnectAttempts === 0) {
-                this.emit(_Trebuchet__WEBPACK_IMPORTED_MODULE_1__["Events"].TRANSPORT_DISCONNECTED);
+                this.emit('disconnected');
             }
             this.tryReconnect();
         });
@@ -444,7 +462,7 @@ class WRTCTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_1__["default"] {
         this.canConnect = false;
         this.messageQueue.clear();
         this.peer.close();
-        this.emit(_Trebuchet__WEBPACK_IMPORTED_MODULE_1__["Events"].CLOSE, { code: 1000, reason, isClientClose: true });
+        this.emit('close', { code: 1000, reason, isClientClose: true });
     }
 }
 /* harmony default export */ __webpack_exports__["default"] = (WRTCTrebuchet);
@@ -479,7 +497,7 @@ const getTrebuchet = async (thunks) => {
 /*!**********************!*\
   !*** ./src/index.ts ***!
   \**********************/
-/*! exports provided: Trebuchet, SocketTrebuchet, SSETrebuchet, WRTCTrebuchet, default, Events, MAX_INT, TREBUCHET_WS, SSE_ID, SSE_CLOSE_EVENT */
+/*! exports provided: Trebuchet, SocketTrebuchet, SSETrebuchet, WRTCTrebuchet, default */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
@@ -499,17 +517,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _getTrebuchet__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./getTrebuchet */ "./src/getTrebuchet.ts");
 /* harmony reexport (safe) */ __webpack_require__.d(__webpack_exports__, "default", function() { return _getTrebuchet__WEBPACK_IMPORTED_MODULE_4__["default"]; });
 
-/* harmony reexport (safe) */ __webpack_require__.d(__webpack_exports__, "Events", function() { return _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["Events"]; });
-
-/* harmony reexport (safe) */ __webpack_require__.d(__webpack_exports__, "MAX_INT", function() { return _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["MAX_INT"]; });
-
-/* harmony reexport (safe) */ __webpack_require__.d(__webpack_exports__, "TREBUCHET_WS", function() { return _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["TREBUCHET_WS"]; });
-
-/* harmony reexport (safe) */ __webpack_require__.d(__webpack_exports__, "SSE_ID", function() { return _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["SSE_ID"]; });
-
-/* harmony reexport (safe) */ __webpack_require__.d(__webpack_exports__, "SSE_CLOSE_EVENT", function() { return _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["SSE_CLOSE_EVENT"]; });
-
-
+/* empty/unused harmony star reexport */
 
 
 
