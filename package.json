@@ -19,7 +19,6 @@
   },
   "dependencies": {
     "@mattkrick/fast-rtc-peer": "^0.0.6",
-    "backo2": "^1.0.2",
     "eventemitter3": "^3.1.0"
   },
   "scripts": {
@@ -41,7 +40,6 @@
     ]
   },
   "devDependencies": {
-    "@types/backo2": "^1.0.0",
     "awesome-typescript-loader": "^5.2.0",
     "clean-webpack-plugin": "^0.1.19",
     "gh-pages": "^1.2.0",
