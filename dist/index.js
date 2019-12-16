@@ -104,7 +104,7 @@ class MessageQueue {
         this.queue.push(message);
     }
     clear() {
-        this.queue.length = 0;
+        this.queue = [];
     }
     flush(send) {
         const startingQueueLength = this.queue.length;
@@ -252,9 +252,11 @@ class SocketTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"]
                 if (!this.mqTimer) {
                     this.mqTimer = window.setTimeout(() => {
                         this.mqTimer = undefined;
-                        if (this.ws.readyState === this.ws.OPEN) {
-                            this.ws.send(this.encode(this.messageQueue.queue));
+                        const { queue } = this.messageQueue;
+                        if (this.ws.readyState === this.ws.OPEN && queue.length > 0) {
                             this.messageQueue.clear();
+                            const message = queue.length === 1 ? queue[0] : queue;
+                            this.ws.send(this.encode(message));
                         }
                     }, this.batchDelay);
                 }

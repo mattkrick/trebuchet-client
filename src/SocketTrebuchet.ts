@@ -103,9 +103,11 @@ class SocketTrebuchet extends Trebuchet {
       if (!this.mqTimer) {
         this.mqTimer = window.setTimeout(() => {
           this.mqTimer = undefined
-          if (this.ws.readyState === this.ws.OPEN) {
-            this.ws.send(this.encode(this.messageQueue.queue))
+          const {queue} = this.messageQueue
+          if (this.ws.readyState === this.ws.OPEN && queue.length > 0) {
             this.messageQueue.clear()
+            const message = queue.length === 1 ? queue[0] : queue
+            this.ws.send(this.encode(message))
           }
         }, this.batchDelay)
       }

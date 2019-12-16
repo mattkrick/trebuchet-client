@@ -10,7 +10,7 @@ class MessageQueue {
   }
 
   clear () {
-    this.queue.length = 0
+    this.queue = []
   }
 
   flush (send: SendFn) {
