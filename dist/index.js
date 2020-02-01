@@ -173,7 +173,7 @@ class SSETrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"] {
                 const splitIdx = event.data.indexOf(':');
                 const code = event.data.slice(0, splitIdx);
                 const reason = event.data.slice(splitIdx + 1);
-                this.emit('close', { code, reason, isClientClose: false });
+                this.emit('close', { code, reason });
                 this.source.close();
             });
             this.source.onmessage = (event) => {
@@ -200,12 +200,12 @@ class SSETrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"] {
         this.setup();
     }
     close(reason) {
+        this.messageQueue.clear();
         if (this.source.CLOSED)
             return;
         this.canConnect = false;
-        this.messageQueue.clear();
         this.source.close();
-        this.emit('close', { code: 1000, reason, isClientClose: true });
+        this.emit('close', { code: 1000, reason });
     }
 }
 /* harmony default export */ __webpack_exports__["default"] = (SSETrebuchet);
@@ -237,7 +237,6 @@ const isPing = (data) => {
 class SocketTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"] {
     constructor(settings) {
         super(settings);
-        this.lastKeepAlive = Date.now();
         this.send = (message) => {
             if (this.batchDelay === -1) {
                 if (this.ws.readyState === this.ws.OPEN) {
@@ -269,14 +268,10 @@ class SocketTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"]
         this.setup();
     }
     keepAlive() {
-        const now = Date.now();
-        if (this.lastKeepAlive > now - this.timeout / 10)
-            return;
-        this.lastKeepAlive = now;
         clearTimeout(this.keepAliveTimeoutId);
         this.keepAliveTimeoutId = window.setTimeout(() => {
             this.keepAliveTimeoutId = undefined;
-            this.ws.close(1000, 'ping timeout');
+            this.ws.close(1000);
         }, this.timeout * 1.5);
     }
     setup() {
@@ -286,12 +281,12 @@ class SocketTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"]
         this.ws.onmessage = (event) => {
             const { data } = event;
             if (isPing(data)) {
+                this.keepAlive();
                 this.ws.send(PONG);
             }
             else {
                 this.emit('data', this.decode(data));
             }
-            this.keepAlive();
         };
         this.ws.onerror = () => {
             if (this.canConnect === undefined) {
@@ -301,11 +296,10 @@ class SocketTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"]
         };
         this.ws.onclose = (event) => {
             const { code, reason } = event;
-            const isClientClose = !!this.isClientClose;
-            if (!isClientClose) {
+            if (reason) {
                 this.canConnect = false;
             }
-            this.emit('close', { code, reason, isClientClose });
+            this.emit('close', { code, reason });
             if (this.canConnect) {
                 if (this.reconnectAttempts === 0) {
                     this.emit('disconnected');
@@ -315,12 +309,10 @@ class SocketTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"]
         };
     }
     close(reason) {
+        this.messageQueue.clear();
         if (this.ws.readyState === this.ws.CLOSED)
             return;
-        this.isClientClose = true;
-        this.canConnect = false;
-        this.messageQueue.clear();
-        this.ws.close(1000, reason);
+        this.ws.close(1000, reason || 'clientClose');
     }
 }
 /* harmony default export */ __webpack_exports__["default"] = (SocketTrebuchet);
@@ -464,7 +456,7 @@ class WRTCTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_1__["default"] {
         this.canConnect = false;
         this.messageQueue.clear();
         this.peer.close();
-        this.emit('close', { code: 1000, reason, isClientClose: true });
+        this.emit('close', { code: 1000, reason });
     }
 }
 /* harmony default export */ __webpack_exports__["default"] = (WRTCTrebuchet);

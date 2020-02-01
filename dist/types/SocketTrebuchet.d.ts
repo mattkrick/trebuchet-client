@@ -10,8 +10,6 @@ export declare const TREBUCHET_WS = "trebuchet-ws";
 declare class SocketTrebuchet extends Trebuchet {
     ws: WebSocket;
     private readonly url;
-    private lastKeepAlive;
-    private isClientClose?;
     private encode;
     private decode;
     private mqTimer;

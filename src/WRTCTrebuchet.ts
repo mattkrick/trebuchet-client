@@ -88,7 +88,7 @@ class WRTCTrebuchet extends Trebuchet {
     this.canConnect = false
     this.messageQueue.clear()
     this.peer.close()
-    this.emit('close', {code: 1000, reason, isClientClose: true})
+    this.emit('close', {code: 1000, reason})
   }
 }
 

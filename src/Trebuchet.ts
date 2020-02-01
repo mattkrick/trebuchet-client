@@ -10,7 +10,6 @@ export interface TrebuchetSettings {
 interface ClosePayload {
   code?: number
   reason?: string
-  isClientClose: boolean
 }
 
 interface TrebuchetEvents {

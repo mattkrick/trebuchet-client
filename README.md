@@ -10,7 +10,8 @@ Because "IT professionals" who believe they can secure their company by blocking
 
 - Establishes a 2-way communication with a client no matter what
 - Uses a heartbeat to keep the connection open
-- Creates a new connection if a firewall ends a long-running connection or the server restarts
+- Creates a new connection if closed without reason (e.g. a firewall ends a long-running connection or the server restarts)
+- Stop future connections if closed with reason (e.g. kicked off, blacklisted in real-time, etc.)
 - Queues unsent messages
 - Provides a clean API to let the user know they've been disconnected or reconnected
 - Supports WebSockets, WebRTC, and SSE. SSE will always work (barring a MITM attack). See [Browser Support](#browser-support)
@@ -71,8 +72,8 @@ const siege = async () => {
     trebuchet.on('reconnected', () => {
       console.log('but our bond cannot be broken')
     })
-    trebuchet.on('close', ({code, reason, isClientClose}) => {
-      if (!isClientClose) {
+    trebuchet.on('close', ({code, reason}) => {
+      if (reason) {
         console.log(`I lied. It's not you, it's the server: ${reason}`)
       }
     })

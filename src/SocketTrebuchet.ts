@@ -22,8 +22,6 @@ const isPing = (data: Data) => {
 class SocketTrebuchet extends Trebuchet {
   ws!: WebSocket
   private readonly url: string
-  private lastKeepAlive = Date.now()
-  private isClientClose?: boolean
   private encode: Encode
   private decode: Decode
   private mqTimer: number | undefined
@@ -37,16 +35,13 @@ class SocketTrebuchet extends Trebuchet {
   }
 
   private keepAlive () {
-    const now = Date.now()
-    // no need to start a new timeout if we just started one
-    if (this.lastKeepAlive > now - this.timeout / 10) return
-    this.lastKeepAlive = now
+    // this.lastKeepAlive = now
     clearTimeout(this.keepAliveTimeoutId)
     // per the protocol, the server sends a ping every 10 seconds
     // if it takes more than 5 seconds to receive that ping, something is wrong
     this.keepAliveTimeoutId = window.setTimeout(() => {
       this.keepAliveTimeoutId = undefined
-      this.ws.close(1000, 'ping timeout')
+      this.ws.close(1000)
     }, this.timeout * 1.5)
   }
 
@@ -58,11 +53,11 @@ class SocketTrebuchet extends Trebuchet {
     this.ws.onmessage = (event: MessageEvent) => {
       const {data} = event
       if (isPing(data)) {
+        this.keepAlive()
         this.ws.send(PONG)
       } else {
         this.emit('data', this.decode(data))
       }
-      this.keepAlive()
     }
 
     this.ws.onerror = () => {
@@ -75,12 +70,11 @@ class SocketTrebuchet extends Trebuchet {
     this.ws.onclose = (event: CloseEvent) => {
       // if the user or the firewall caused the close, don't reconnect & don't announce the disconnect
       const {code, reason} = event
-      const isClientClose = !!this.isClientClose
-      if (!isClientClose) {
-        // if the server closed the connection, don't try to reconnect
+      if (reason) {
+        // if there's a reason to close, keep it closed
         this.canConnect = false
       }
-      this.emit('close', {code, reason, isClientClose})
+      this.emit('close', {code, reason})
       if (this.canConnect) {
         if (this.reconnectAttempts === 0) {
           // only send the message once per disconnect
@@ -115,12 +109,10 @@ class SocketTrebuchet extends Trebuchet {
   }
 
   close (reason?: string) {
-    if (this.ws.readyState === this.ws.CLOSED) return
     // called by the user, so we know it's intentional
-    this.isClientClose = true
-    this.canConnect = false
     this.messageQueue.clear()
-    this.ws.close(1000, reason)
+    if (this.ws.readyState === this.ws.CLOSED) return
+    this.ws.close(1000, reason || 'clientClose')
   }
 }
 

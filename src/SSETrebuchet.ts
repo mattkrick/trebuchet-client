@@ -67,7 +67,7 @@ class SSETrebuchet extends Trebuchet {
       const splitIdx = event.data.indexOf(':')
       const code = event.data.slice(0, splitIdx)
       const reason = event.data.slice(splitIdx + 1)
-      this.emit('close', {code, reason, isClientClose: false})
+      this.emit('close', {code, reason})
       this.source.close()
     })
 
@@ -92,12 +92,12 @@ class SSETrebuchet extends Trebuchet {
   }
 
   close (reason?: string) {
+    this.messageQueue.clear()
     if (this.source.CLOSED) return
     // called by the user, so we know it's intentional
     this.canConnect = false
-    this.messageQueue.clear()
     this.source.close()
-    this.emit('close', {code: 1000, reason, isClientClose: true})
+    this.emit('close', {code: 1000, reason})
   }
 }
 
