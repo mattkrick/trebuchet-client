@@ -4,7 +4,7 @@ export type FetchData = (data: any, connectionId: string) => Promise<Data>
 export type FetchPing = (connectionId: string) => Promise<Response>
 
 export interface SSESettings extends TrebuchetSettings {
-  url: string
+  getUrl: () => string
   fetchData: FetchData
   fetchPing: FetchPing
 }
@@ -12,20 +12,20 @@ const MAX_INT = 2 ** 31 - 1
 
 class SSETrebuchet extends Trebuchet {
   source!: EventSource
-  private readonly url: string
+  private readonly getUrl: () => string
   private readonly fetchData: FetchData
   private readonly fetchPing: FetchPing
   private connectionId: string | undefined = undefined
   constructor (settings: SSESettings) {
     super(settings)
-    this.url = settings.url
+    this.getUrl = settings.getUrl
     this.fetchData = settings.fetchData
     this.fetchPing = settings.fetchPing
     this.setup()
   }
 
   protected setup = () => {
-    this.source = new EventSource(this.url)
+    this.source = new EventSource(this.getUrl())
     this.source.onopen = this.handleOpen.bind(this)
 
     this.source.onerror = () => {

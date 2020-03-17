@@ -4,7 +4,7 @@ type Encode = (msg: any) => Data
 type Decode = (msg: any) => any
 
 export interface WSSettings extends TrebuchetSettings {
-  url: string
+  getUrl: () => string
   encode?: Encode
   decode?: Decode
 }
@@ -21,7 +21,7 @@ const isPing = (data: Data) => {
 
 class SocketTrebuchet extends Trebuchet {
   ws!: WebSocket
-  private readonly url: string
+  private readonly getUrl: () => string
   private encode: Encode
   private decode: Decode
   private mqTimer: number | undefined
@@ -30,7 +30,7 @@ class SocketTrebuchet extends Trebuchet {
     const {decode, encode} = settings
     this.encode = encode || JSON.stringify
     this.decode = decode || JSON.parse
-    this.url = settings.url
+    this.getUrl = settings.getUrl
     this.setup()
   }
 
@@ -46,7 +46,7 @@ class SocketTrebuchet extends Trebuchet {
   }
 
   protected setup () {
-    this.ws = new WebSocket(this.url, TREBUCHET_WS)
+    this.ws = new WebSocket(this.getUrl(), TREBUCHET_WS)
     this.ws.binaryType = 'arraybuffer'
     this.ws.onopen = this.handleOpen.bind(this)
 

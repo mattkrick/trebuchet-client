@@ -136,7 +136,7 @@ class SSETrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"] {
         super(settings);
         this.connectionId = undefined;
         this.setup = () => {
-            this.source = new EventSource(this.url);
+            this.source = new EventSource(this.getUrl());
             this.source.onopen = this.handleOpen.bind(this);
             this.source.onerror = () => {
                 this.connectionId = undefined;
@@ -194,7 +194,7 @@ class SSETrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"] {
                 this.messageQueue.add(message);
             }
         };
-        this.url = settings.url;
+        this.getUrl = settings.getUrl;
         this.fetchData = settings.fetchData;
         this.fetchPing = settings.fetchPing;
         this.setup();
@@ -264,7 +264,7 @@ class SocketTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"]
         const { decode, encode } = settings;
         this.encode = encode || JSON.stringify;
         this.decode = decode || JSON.parse;
-        this.url = settings.url;
+        this.getUrl = settings.getUrl;
         this.setup();
     }
     keepAlive() {
@@ -275,7 +275,7 @@ class SocketTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"]
         }, this.timeout * 1.5);
     }
     setup() {
-        this.ws = new WebSocket(this.url, TREBUCHET_WS);
+        this.ws = new WebSocket(this.getUrl(), TREBUCHET_WS);
         this.ws.binaryType = 'arraybuffer';
         this.ws.onopen = this.handleOpen.bind(this);
         this.ws.onmessage = (event) => {

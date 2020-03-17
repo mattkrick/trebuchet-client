@@ -25,23 +25,21 @@ Because "IT professionals" who believe they can secure their company by blocking
 ## API
 
 - `getTrebuchet(thunks)`: given an array of trebuchets, it tries them in order & returns the first that works
-- `SocketTrebuchet({url, encode, decode, batchDelay})`: a constructor to establish a websocket connection
+- `SocketTrebuchet({getUrl, encode, decode, batchDelay})`: a constructor to establish a websocket connection
   - `encode`: An encoding mechanism, defaults to `JSON.stringify`
   - `decode`: A decoding mechanism, defaults to `JSON.parse`
   - `batchDelay`: default is `-1` (no delay), pass `0` or higher to wrap in a `setTimeout` (`0` waits until next tick, highly recommended, if the server supports it)
-- `SSETrebuchet({url, fetchData, fethcPing})`: a constructor to establish server-sent events
-- `WRTCTrebuchet({url, fetchSignalServer})`: a constructor to establish a peer connection with the server
+- `SSETrebuchet({getUrl, fetchData, fethcPing})`: a constructor to establish server-sent events
 
 ## Example
 
 ```js
 import getTrebuchet, {SocketTrebuchet, SSETrebuchet, WRTCTrebuchet} from '@mattkrick/trebuchet-client'
 
-
 const trebuchets = [
-  () => new SocketTrebuchet({url: 'wss://my-server.co', enocde: msgpack.encode, decode: msgpack.decode, batchDelay: 10}),
+  () => new SocketTrebuchet({getUrl:  () => 'wss://my-server.co', enocde: msgpack.encode, decode: msgpack.decode, batchDelay: 10}),
   () => {
-    const url = 'https://my-server.co'
+    const getUrl = () => 'https://my-server.co'
     const fetchPing = (connectionId) => fetch(`/sse/?ping=true&id=${connectionId}`)
     const fetchData = (data, connectionId) => fetch('/dataRoute', {
       method: 'POST',
@@ -51,7 +49,7 @@ const trebuchets = [
       },
       body: JSON.stringify(data)
     })
-    return new SSETrebuchet({url, fetchData, fetchPing})
+    return new SSETrebuchet({getUrl, fetchData, fetchPing})
   },
   () => {
     const fetchSignalServer = (signal) => fetch(`/rtc`, {method: 'POST', body: JSON.stringify(signal)})
