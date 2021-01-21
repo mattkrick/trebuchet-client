@@ -227,6 +227,7 @@ __webpack_require__.r(__webpack_exports__);
 
 const PING = 57;
 const PONG = new Uint8Array([65]);
+const ACK_PREFIX = 6;
 const TREBUCHET_WS = 'trebuchet-ws';
 const isPing = (data) => {
     if (typeof data === 'string')
@@ -274,18 +275,65 @@ class SocketTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"]
             this.ws.close(1000);
         }, this.timeout * 1.5);
     }
+    respondToReliableMessage(decodedData) {
+        const synId = decodedData.synId;
+        this.ws.send(new Uint8Array([ACK_PREFIX, decodedData.synId]));
+        this.lastReliableSynId = synId;
+        this.emit('data', decodedData.object);
+    }
+    processReliableMessageInOrder(decodedData) {
+        const synId = decodedData.synId;
+        this.reliableMessageQueue
+            .filter((_data, idx) => idx < synId)
+            .forEach((data, idx) => {
+            this.respondToReliableMessage(data);
+            delete this.reliableMessageQueue[idx];
+        });
+        this.respondToReliableMessage(decodedData);
+    }
+    randomlyDropMessage(decodedData) {
+        var _a, _b, _c, _d;
+        const maybeSubscription = (_d = Object.keys((_c = (_b = (_a = decodedData.object) === null || _a === void 0 ? void 0 : _a.payload) === null || _b === void 0 ? void 0 : _b.data) !== null && _c !== void 0 ? _c : [])[0]) !== null && _d !== void 0 ? _d : '';
+        const dice = Math.random();
+        if (dice < 0.25 && maybeSubscription.endsWith('Subscription')) {
+            console.log(`I've got a reliable message with synId ${decodedData.synId} for ${maybeSubscription} but I chose to ignore it!`);
+            return true;
+        }
+        return false;
+    }
     setup() {
+        this.lastReliableSynId = 0;
+        this.reliableMessageQueue = [];
         this.ws = new WebSocket(this.getUrl(), TREBUCHET_WS);
         this.ws.binaryType = 'arraybuffer';
         this.ws.onopen = this.handleOpen.bind(this);
         this.ws.onmessage = (event) => {
+            var _a, _b, _c, _d;
             const { data } = event;
             if (isPing(data)) {
                 this.keepAlive();
                 this.ws.send(PONG);
             }
             else {
-                this.emit('data', this.decode(data));
+                const decodedData = this.decode(data);
+                const synId = decodedData.synId;
+                if (synId) {
+                    if (this.randomlyDropMessage(decodedData)) {
+                        return;
+                    }
+                    if (this.lastReliableSynId + 1 === synId) {
+                        const maybeSubscription = (_d = Object.keys((_c = (_b = (_a = decodedData.object) === null || _a === void 0 ? void 0 : _a.payload) === null || _b === void 0 ? void 0 : _b.data) !== null && _c !== void 0 ? _c : [])[0]) !== null && _d !== void 0 ? _d : '';
+                        console.log(`I've received a reliable message with synId ${synId} for ${maybeSubscription} and I'm going to reply an acknowledgement.`);
+                        this.processReliableMessageInOrder(decodedData);
+                    }
+                    else {
+                        this.reliableMessageQueue[synId] = decodedData;
+                        console.log(`My last reliable sync Id recorded was ${this.lastReliableSynId}; I'm getting a new synId ${synId} and it looks I'm getting messages out of order so I've put it in the queue: ${JSON.stringify(this.reliableMessageQueue)}`);
+                    }
+                }
+                else {
+                    this.emit('data', decodedData);
+                }
             }
         };
         this.ws.onerror = () => {
@@ -296,6 +344,7 @@ class SocketTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"]
         };
         this.ws.onclose = (event) => {
             const { code, reason } = event;
+            console.log(`[CLIENT] Our connection with server is closed because '${reason}' with code ${code}.`);
             if (reason) {
                 this.canConnect = false;
             }
@@ -355,7 +404,7 @@ class Trebuchet extends eventemitter3__WEBPACK_IMPORTED_MODULE_0___default.a {
             this.messageQueue.flush(this.send);
         };
         this.timeout = settings.timeout || 10000;
-        this.batchDelay = (_a = settings.batchDelay, (_a !== null && _a !== void 0 ? _a : -1));
+        this.batchDelay = (_a = settings.batchDelay) !== null && _a !== void 0 ? _a : -1;
     }
     tryReconnect() {
         if (!this.canConnect)

@@ -13,8 +13,13 @@ declare class SocketTrebuchet extends Trebuchet {
     private encode;
     private decode;
     private mqTimer;
+    private lastReliableSynId;
+    private reliableMessageQueue;
     constructor(settings: WSSettings);
     private keepAlive;
+    private respondToReliableMessage;
+    private processReliableMessageInOrder;
+    private randomlyDropMessage;
     protected setup(): void;
     send: (message: any) => void;
     close(reason?: string): void;
