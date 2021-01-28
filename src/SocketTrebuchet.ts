@@ -67,18 +67,6 @@ class SocketTrebuchet extends Trebuchet {
     this.respondToReliableMessage(decodedData)
   }
 
-  private randomlyDropMessage (decodedData: any): boolean {
-    const maybeSubscription = Object.keys(decodedData.object?.payload?.data ?? [])[0] ?? ''
-    const dice = Math.random()
-    if (dice < 0.25 && maybeSubscription.endsWith('Subscription')) {
-      console.log(
-        `I've got a reliable message with synId ${decodedData.synId} for ${maybeSubscription} but I chose to ignore it!`
-      )
-      return true
-    }
-    return false
-  }
-
   protected setup () {
     this.ws = new WebSocket(this.getUrl(), TREBUCHET_WS)
     this.ws.binaryType = 'arraybuffer'
@@ -95,30 +83,13 @@ class SocketTrebuchet extends Trebuchet {
         const decodedData = this.decode(data)
         const synId = decodedData.synId
         if (synId !== undefined) {
-          if (this.randomlyDropMessage(decodedData)) {
-            return
-          }
-          console.log(
-            `My last reliable sync id is ${this.lastReliableSynId} and I'm getting a new syncId: ${synId}`
-          )
           if (
             this.lastReliableSynId + 1 === synId ||
             (this.lastReliableSynId + 1 === MAX_MESSAGE_ID && synId === 0)
           ) {
-            const maybeSubscription = Object.keys(decodedData.object?.payload?.data ?? [])[0] ?? ''
-            console.log(
-              `I've received a reliable message with synId ${synId} for ${maybeSubscription} and I'm going to reply an acknowledgement.`
-            )
             this.processReliableMessageInOrder(decodedData)
           } else {
             this.reliableMessageQueue[synId] = decodedData
-            console.log(
-              `My last reliable sync Id recorded was ${
-                this.lastReliableSynId
-              }; I'm getting a new synId ${synId} and it looks I'm getting messages out of order so I've put it in the queue: ${JSON.stringify(
-                this.reliableMessageQueue
-              )}`
-            )
           }
         } else {
           this.emit('data', decodedData)

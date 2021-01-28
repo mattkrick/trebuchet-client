@@ -292,16 +292,6 @@ class SocketTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"]
         });
         this.respondToReliableMessage(decodedData);
     }
-    randomlyDropMessage(decodedData) {
-        var _a, _b, _c, _d;
-        const maybeSubscription = (_d = Object.keys((_c = (_b = (_a = decodedData.object) === null || _a === void 0 ? void 0 : _a.payload) === null || _b === void 0 ? void 0 : _b.data) !== null && _c !== void 0 ? _c : [])[0]) !== null && _d !== void 0 ? _d : '';
-        const dice = Math.random();
-        if (dice < 0.25 && maybeSubscription.endsWith('Subscription')) {
-            console.log(`I've got a reliable message with synId ${decodedData.synId} for ${maybeSubscription} but I chose to ignore it!`);
-            return true;
-        }
-        return false;
-    }
     setup() {
         this.ws = new WebSocket(this.getUrl(), TREBUCHET_WS);
         this.ws.binaryType = 'arraybuffer';
@@ -309,7 +299,6 @@ class SocketTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"]
         this.lastReliableSynId = -1;
         this.reliableMessageQueue = [];
         this.ws.onmessage = (event) => {
-            var _a, _b, _c, _d;
             const { data } = event;
             if (isPing(data)) {
                 this.keepAlive();
@@ -319,19 +308,12 @@ class SocketTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"]
                 const decodedData = this.decode(data);
                 const synId = decodedData.synId;
                 if (synId !== undefined) {
-                    if (this.randomlyDropMessage(decodedData)) {
-                        return;
-                    }
-                    console.log(`My last reliable sync id is ${this.lastReliableSynId} and I'm getting a new syncId: ${synId}`);
                     if (this.lastReliableSynId + 1 === synId ||
                         (this.lastReliableSynId + 1 === MAX_MESSAGE_ID && synId === 0)) {
-                        const maybeSubscription = (_d = Object.keys((_c = (_b = (_a = decodedData.object) === null || _a === void 0 ? void 0 : _a.payload) === null || _b === void 0 ? void 0 : _b.data) !== null && _c !== void 0 ? _c : [])[0]) !== null && _d !== void 0 ? _d : '';
-                        console.log(`I've received a reliable message with synId ${synId} for ${maybeSubscription} and I'm going to reply an acknowledgement.`);
                         this.processReliableMessageInOrder(decodedData);
                     }
                     else {
                         this.reliableMessageQueue[synId] = decodedData;
-                        console.log(`My last reliable sync Id recorded was ${this.lastReliableSynId}; I'm getting a new synId ${synId} and it looks I'm getting messages out of order so I've put it in the queue: ${JSON.stringify(this.reliableMessageQueue)}`);
                     }
                 }
                 else {

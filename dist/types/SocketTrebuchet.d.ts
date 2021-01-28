@@ -19,7 +19,6 @@ declare class SocketTrebuchet extends Trebuchet {
     private keepAlive;
     private respondToReliableMessage;
     private processReliableMessageInOrder;
-    private randomlyDropMessage;
     protected setup(): void;
     send: (message: any) => void;
     close(reason?: string): void;
