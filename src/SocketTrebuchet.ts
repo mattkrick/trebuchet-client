@@ -12,6 +12,7 @@ export interface WSSettings extends TrebuchetSettings {
 const PING = 57
 const PONG = new Uint8Array([65])
 const ACK_PREFIX = 6
+const MAX_MESSAGE_ID = 128
 export const TREBUCHET_WS = 'trebuchet-ws'
 
 const isPing = (data: Data) => {
@@ -22,20 +23,18 @@ const isPing = (data: Data) => {
 
 class SocketTrebuchet extends Trebuchet {
   ws!: WebSocket
+  private lastReliableSynId!: number
+  private reliableMessageQueue!: any[]
   private readonly getUrl: () => string
   private encode: Encode
   private decode: Decode
   private mqTimer: number | undefined
-  private lastReliableSynId: number
-  private reliableMessageQueue: any[]
   constructor (settings: WSSettings) {
     super(settings)
     const {decode, encode} = settings
     this.encode = encode || JSON.stringify
     this.decode = decode || JSON.parse
     this.getUrl = settings.getUrl
-    this.lastReliableSynId = 0
-    this.reliableMessageQueue = []
     this.setup()
   }
 
@@ -53,7 +52,7 @@ class SocketTrebuchet extends Trebuchet {
   private respondToReliableMessage (decodedData: any) {
     const synId = decodedData.synId
     this.ws.send(new Uint8Array([ACK_PREFIX, decodedData.synId]))
-    this.lastReliableSynId = synId
+    this.lastReliableSynId = synId === MAX_MESSAGE_ID - 1 ? -1 : synId
     this.emit('data', decodedData.object)
   }
 
@@ -68,21 +67,24 @@ class SocketTrebuchet extends Trebuchet {
     this.respondToReliableMessage(decodedData)
   }
 
-  private randomlyDropMessage(decodedData: any): boolean {
-    const maybeSubscription = Object.keys(decodedData.object?.payload?.data?? [])[0] ?? ''
+  private randomlyDropMessage (decodedData: any): boolean {
+    const maybeSubscription = Object.keys(decodedData.object?.payload?.data ?? [])[0] ?? ''
     const dice = Math.random()
     if (dice < 0.25 && maybeSubscription.endsWith('Subscription')) {
-      console.log(`I've got a reliable message with synId ${decodedData.synId} for ${maybeSubscription} but I chose to ignore it!`)
+      console.log(
+        `I've got a reliable message with synId ${decodedData.synId} for ${maybeSubscription} but I chose to ignore it!`
+      )
       return true
     }
     return false
   }
 
   protected setup () {
-
     this.ws = new WebSocket(this.getUrl(), TREBUCHET_WS)
     this.ws.binaryType = 'arraybuffer'
     this.ws.onopen = this.handleOpen.bind(this)
+    this.lastReliableSynId = -1
+    this.reliableMessageQueue = []
 
     this.ws.onmessage = (event: MessageEvent) => {
       const {data} = event
@@ -92,12 +94,18 @@ class SocketTrebuchet extends Trebuchet {
       } else {
         const decodedData = this.decode(data)
         const synId = decodedData.synId
-        if (synId) {
+        if (synId !== undefined) {
           if (this.randomlyDropMessage(decodedData)) {
             return
           }
-          if (this.lastReliableSynId + 1 === synId) {
-            const maybeSubscription = Object.keys(decodedData.object?.payload?.data?? [])[0] ?? ''
+          console.log(
+            `My last reliable sync id is ${this.lastReliableSynId} and I'm getting a new syncId: ${synId}`
+          )
+          if (
+            this.lastReliableSynId + 1 === synId ||
+            (this.lastReliableSynId + 1 === MAX_MESSAGE_ID && synId === 0)
+          ) {
+            const maybeSubscription = Object.keys(decodedData.object?.payload?.data ?? [])[0] ?? ''
             console.log(
               `I've received a reliable message with synId ${synId} for ${maybeSubscription} and I'm going to reply an acknowledgement.`
             )
@@ -128,9 +136,6 @@ class SocketTrebuchet extends Trebuchet {
     this.ws.onclose = (event: CloseEvent) => {
       // if the user or the firewall caused the close, don't reconnect & don't announce the disconnect
       const {code, reason} = event
-      console.log(
-        `[CLIENT] Our connection with server is closed because '${reason}' with code ${code}.`
-      )
       if (reason) {
         // if there's a reason to close, keep it closed
         this.canConnect = false

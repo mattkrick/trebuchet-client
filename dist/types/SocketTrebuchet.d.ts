@@ -9,12 +9,12 @@ export interface WSSettings extends TrebuchetSettings {
 export declare const TREBUCHET_WS = "trebuchet-ws";
 declare class SocketTrebuchet extends Trebuchet {
     ws: WebSocket;
+    private lastReliableSynId;
+    private reliableMessageQueue;
     private readonly getUrl;
     private encode;
     private decode;
     private mqTimer;
-    private lastReliableSynId;
-    private reliableMessageQueue;
     constructor(settings: WSSettings);
     private keepAlive;
     private respondToReliableMessage;

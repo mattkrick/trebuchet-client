@@ -228,6 +228,7 @@ __webpack_require__.r(__webpack_exports__);
 const PING = 57;
 const PONG = new Uint8Array([65]);
 const ACK_PREFIX = 6;
+const MAX_MESSAGE_ID = 128;
 const TREBUCHET_WS = 'trebuchet-ws';
 const isPing = (data) => {
     if (typeof data === 'string')
@@ -278,7 +279,7 @@ class SocketTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"]
     respondToReliableMessage(decodedData) {
         const synId = decodedData.synId;
         this.ws.send(new Uint8Array([ACK_PREFIX, decodedData.synId]));
-        this.lastReliableSynId = synId;
+        this.lastReliableSynId = synId === MAX_MESSAGE_ID - 1 ? -1 : synId;
         this.emit('data', decodedData.object);
     }
     processReliableMessageInOrder(decodedData) {
@@ -302,11 +303,11 @@ class SocketTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"]
         return false;
     }
     setup() {
-        this.lastReliableSynId = 0;
-        this.reliableMessageQueue = [];
         this.ws = new WebSocket(this.getUrl(), TREBUCHET_WS);
         this.ws.binaryType = 'arraybuffer';
         this.ws.onopen = this.handleOpen.bind(this);
+        this.lastReliableSynId = -1;
+        this.reliableMessageQueue = [];
         this.ws.onmessage = (event) => {
             var _a, _b, _c, _d;
             const { data } = event;
@@ -317,11 +318,13 @@ class SocketTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"]
             else {
                 const decodedData = this.decode(data);
                 const synId = decodedData.synId;
-                if (synId) {
+                if (synId !== undefined) {
                     if (this.randomlyDropMessage(decodedData)) {
                         return;
                     }
-                    if (this.lastReliableSynId + 1 === synId) {
+                    console.log(`My last reliable sync id is ${this.lastReliableSynId} and I'm getting a new syncId: ${synId}`);
+                    if (this.lastReliableSynId + 1 === synId ||
+                        (this.lastReliableSynId + 1 === MAX_MESSAGE_ID && synId === 0)) {
                         const maybeSubscription = (_d = Object.keys((_c = (_b = (_a = decodedData.object) === null || _a === void 0 ? void 0 : _a.payload) === null || _b === void 0 ? void 0 : _b.data) !== null && _c !== void 0 ? _c : [])[0]) !== null && _d !== void 0 ? _d : '';
                         console.log(`I've received a reliable message with synId ${synId} for ${maybeSubscription} and I'm going to reply an acknowledgement.`);
                         this.processReliableMessageInOrder(decodedData);
@@ -344,7 +347,6 @@ class SocketTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"]
         };
         this.ws.onclose = (event) => {
             const { code, reason } = event;
-            console.log(`[CLIENT] Our connection with server is closed because '${reason}' with code ${code}.`);
             if (reason) {
                 this.canConnect = false;
             }
