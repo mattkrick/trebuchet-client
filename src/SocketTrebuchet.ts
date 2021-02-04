@@ -1,7 +1,7 @@
 import Trebuchet, {Data, TrebuchetSettings} from './Trebuchet'
 
 type Encode = (msg: any) => Data
-type Decode = (msg: any) => any
+type Decode = (msg: any) => {message: any; mid?: number}
 
 export interface WSSettings extends TrebuchetSettings {
   getUrl: () => string
@@ -11,6 +11,9 @@ export interface WSSettings extends TrebuchetSettings {
 
 const PING = 57
 const PONG = new Uint8Array([65])
+const MAX_MID = 2 ** 31 - 1
+const MAX_IGNORE_LEN = 1000
+
 export const TREBUCHET_WS = 'trebuchet-ws'
 
 const isPing = (data: Data) => {
@@ -19,21 +22,28 @@ const isPing = (data: Data) => {
   return buffer.length === 1 && buffer[0] === PING
 }
 
+const defaultDecode: Decode = (msg) => {
+  const parsedData = JSON.parse(msg)
+  if (!Array.isArray(parsedData)) return {message: parsedData}
+  const [message, mid] = parsedData
+  return {message, mid}
+}
+
 class SocketTrebuchet extends Trebuchet {
   ws!: WebSocket
   private readonly getUrl: () => string
   private encode: Encode
   private decode: Decode
   private mqTimer: number | undefined
+
   constructor (settings: WSSettings) {
     super(settings)
     const {decode, encode} = settings
     this.encode = encode || JSON.stringify
-    this.decode = decode || JSON.parse
+    this.decode = decode || defaultDecode
     this.getUrl = settings.getUrl
     this.setup()
   }
-
   private keepAlive () {
     // this.lastKeepAlive = now
     clearTimeout(this.keepAliveTimeoutId)
@@ -43,6 +53,39 @@ class SocketTrebuchet extends Trebuchet {
       this.keepAliveTimeoutId = undefined
       this.ws.close(1000)
     }, this.timeout * 1.5)
+  }
+
+  private sendAck (mid: number) {
+    const ack = new Uint8Array(4)
+    const view = new DataView(ack.buffer)
+    // first bit is a 0 if ACK
+    const ackId = mid << 1
+    // guarantee little endian
+    view.setUint32(0, ackId, true)
+    this.ws.send(ack)
+  }
+
+  private sendReq (mid: number) {
+    const req = new Uint8Array(4)
+    const view = new DataView(req.buffer)
+    // first bit is 0 if REQ
+    const reqId = (mid << 1) | 1
+    view.setUint32(0, reqId, true)
+    this.ws.send(req)
+  }
+
+  private releaseNextRobustMessage () {
+    const nextId = this.lastMid + 1
+    const message = this.robustQueue[nextId]
+    if (!message) {
+      // we're all caught up!
+      this.requestedMids.length = 0
+      return
+    }
+    delete this.robustQueue[nextId]
+    this.lastMid = nextId
+    this.emit('data', message)
+    this.releaseNextRobustMessage()
   }
 
   protected setup () {
@@ -56,7 +99,43 @@ class SocketTrebuchet extends Trebuchet {
         this.keepAlive()
         this.ws.send(PONG)
       } else {
-        this.emit('data', this.decode(data))
+        const {message, mid} = this.decode(data)
+        if (!message) return
+        // handle non-reliable messages
+        if (typeof mid !== 'number' || mid > MAX_MID || mid < 0) {
+          this.emit('data', message)
+          return
+        }
+
+        // ignore mids that were already requested & processed
+        if (this.midsToIgnore.includes(mid)) return
+
+        // TCP guarantees AT MOST ONCE
+        // if a mid is requested, then the delivery guarantee becomes AT LEAST ONCE, so we need to ignore dupes
+        if (this.requestedMids.includes(mid)) {
+          this.midsToIgnore.push(mid)
+          if (this.midsToIgnore.length > MAX_IGNORE_LEN) {
+            this.midsToIgnore.splice(0, 1)
+          }
+        }
+
+        this.sendAck(mid)
+
+        if (this.lastMid + 1 === mid) {
+          // get next in order
+          this.lastMid = mid
+          this.emit('data', message)
+          this.releaseNextRobustMessage()
+          return
+        }
+
+        // a missing message was detected!
+        this.robustQueue[mid] = message
+
+        // request the first missing message (could get called multiple times)
+        const missingMid = this.lastMid + 1
+        this.sendReq(missingMid)
+        this.requestedMids.push(missingMid)
       }
     }
 

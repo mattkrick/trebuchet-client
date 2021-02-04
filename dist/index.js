@@ -227,12 +227,21 @@ __webpack_require__.r(__webpack_exports__);
 
 const PING = 57;
 const PONG = new Uint8Array([65]);
+const MAX_MID = 2 ** 31 - 1;
+const MAX_IGNORE_LEN = 1000;
 const TREBUCHET_WS = 'trebuchet-ws';
 const isPing = (data) => {
     if (typeof data === 'string')
         return false;
     const buffer = new Uint8Array(data);
     return buffer.length === 1 && buffer[0] === PING;
+};
+const defaultDecode = (msg) => {
+    const parsedData = JSON.parse(msg);
+    if (!Array.isArray(parsedData))
+        return { message: parsedData };
+    const [message, mid] = parsedData;
+    return { message, mid };
 };
 class SocketTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"] {
     constructor(settings) {
@@ -263,7 +272,7 @@ class SocketTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"]
         };
         const { decode, encode } = settings;
         this.encode = encode || JSON.stringify;
-        this.decode = decode || JSON.parse;
+        this.decode = decode || defaultDecode;
         this.getUrl = settings.getUrl;
         this.setup();
     }
@@ -273,6 +282,32 @@ class SocketTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"]
             this.keepAliveTimeoutId = undefined;
             this.ws.close(1000);
         }, this.timeout * 1.5);
+    }
+    sendAck(mid) {
+        const ack = new Uint8Array(4);
+        const view = new DataView(ack.buffer);
+        const ackId = mid << 1;
+        view.setUint32(0, ackId, true);
+        this.ws.send(ack);
+    }
+    sendReq(mid) {
+        const req = new Uint8Array(4);
+        const view = new DataView(req.buffer);
+        const reqId = (mid << 1) | 1;
+        view.setUint32(0, reqId, true);
+        this.ws.send(req);
+    }
+    releaseNextRobustMessage() {
+        const nextId = this.lastMid + 1;
+        const message = this.robustQueue[nextId];
+        if (!message) {
+            this.requestedMids.length = 0;
+            return;
+        }
+        delete this.robustQueue[nextId];
+        this.lastMid = nextId;
+        this.emit('data', message);
+        this.releaseNextRobustMessage();
     }
     setup() {
         this.ws = new WebSocket(this.getUrl(), TREBUCHET_WS);
@@ -285,7 +320,32 @@ class SocketTrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"]
                 this.ws.send(PONG);
             }
             else {
-                this.emit('data', this.decode(data));
+                const { message, mid } = this.decode(data);
+                if (!message)
+                    return;
+                if (typeof mid !== 'number' || mid > MAX_MID || mid < 0) {
+                    this.emit('data', message);
+                    return;
+                }
+                if (this.midsToIgnore.includes(mid))
+                    return;
+                if (this.requestedMids.includes(mid)) {
+                    this.midsToIgnore.push(mid);
+                    if (this.midsToIgnore.length > MAX_IGNORE_LEN) {
+                        this.midsToIgnore.splice(0, 1);
+                    }
+                }
+                this.sendAck(mid);
+                if (this.lastMid + 1 === mid) {
+                    this.lastMid = mid;
+                    this.emit('data', message);
+                    this.releaseNextRobustMessage();
+                    return;
+                }
+                this.robustQueue[mid] = message;
+                const missingMid = this.lastMid + 1;
+                this.sendReq(missingMid);
+                this.requestedMids.push(missingMid);
             }
         };
         this.ws.onerror = () => {
@@ -342,6 +402,10 @@ class Trebuchet extends eventemitter3__WEBPACK_IMPORTED_MODULE_0___default.a {
         this.messageQueue = new _MessageQueue__WEBPACK_IMPORTED_MODULE_1__["default"]();
         this.canConnect = undefined;
         this.reconnectAttempts = 0;
+        this.lastMid = -1;
+        this.robustQueue = {};
+        this.midsToIgnore = [];
+        this.requestedMids = [];
         this.handleOpen = () => {
             if (this.reconnectAttempts === 0) {
                 this.canConnect = true;
@@ -353,9 +417,13 @@ class Trebuchet extends eventemitter3__WEBPACK_IMPORTED_MODULE_0___default.a {
                 this.emit('reconnected');
             }
             this.messageQueue.flush(this.send);
+            this.lastMid = -1;
+            this.robustQueue = {};
+            this.midsToIgnore = [];
+            this.requestedMids = [];
         };
         this.timeout = settings.timeout || 10000;
-        this.batchDelay = (_a = settings.batchDelay, (_a !== null && _a !== void 0 ? _a : -1));
+        this.batchDelay = (_a = settings.batchDelay) !== null && _a !== void 0 ? _a : -1;
     }
     tryReconnect() {
         if (!this.canConnect)

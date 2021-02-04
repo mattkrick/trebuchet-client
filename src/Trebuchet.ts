@@ -1,6 +1,6 @@
 import EventEmitter from 'eventemitter3'
-import MessageQueue from './MessageQueue'
 import StrictEventEmitter from 'strict-event-emitter-types'
+import MessageQueue from './MessageQueue'
 
 export interface TrebuchetSettings {
   timeout?: number
@@ -34,6 +34,10 @@ abstract class Trebuchet extends (EventEmitter as TrebuchetEmitter) {
   protected reconnectAttempts = 0
   protected reconnectTimeoutId: number | undefined
   protected keepAliveTimeoutId: number | undefined
+  protected lastMid = -1
+  protected robustQueue = {} as {[mid: number]: any}
+  protected midsToIgnore = [] as number[]
+  protected requestedMids = [] as number[]
   constructor (settings: TrebuchetSettings) {
     super()
     this.timeout = settings.timeout || 10000
@@ -55,6 +59,10 @@ abstract class Trebuchet extends (EventEmitter as TrebuchetEmitter) {
       this.emit('reconnected')
     }
     this.messageQueue.flush(this.send)
+    this.lastMid = -1
+    this.robustQueue = {}
+    this.midsToIgnore = []
+    this.requestedMids = []
   }
 
   protected tryReconnect () {
