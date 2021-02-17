@@ -2,26 +2,74 @@ import Trebuchet, {Data, TrebuchetSettings} from './Trebuchet'
 
 export type FetchData = (data: any, connectionId: string) => Promise<Data>
 export type FetchPing = (connectionId: string) => Promise<Response>
+export type FetchReliable = (connectionId: string, data: ArrayBuffer) => Promise<Response>
 
 export interface SSESettings extends TrebuchetSettings {
   getUrl: () => string
   fetchData: FetchData
   fetchPing: FetchPing
+  fetchReliable?: FetchReliable
 }
 const MAX_INT = 2 ** 31 - 1
+const MAX_MID = 2 ** 31 - 1
+const MAX_IGNORE_LEN = 1000
+
+const decode = (msg: string) => {
+  const parsedData = JSON.parse(msg)
+  if (!Array.isArray(parsedData)) return {message: parsedData}
+  const [message, mid] = parsedData
+  return {message, mid}
+}
 
 class SSETrebuchet extends Trebuchet {
   source!: EventSource
   private readonly getUrl: () => string
   private readonly fetchData: FetchData
   private readonly fetchPing: FetchPing
+  private readonly fetchReliable?: FetchReliable
   private connectionId: string | undefined = undefined
   constructor (settings: SSESettings) {
     super(settings)
     this.getUrl = settings.getUrl
     this.fetchData = settings.fetchData
     this.fetchPing = settings.fetchPing
+    this.fetchReliable = settings.fetchReliable
     this.setup()
+  }
+
+  private sendAck (mid: number) {
+    const ack = new Uint8Array(4)
+    const view = new DataView(ack.buffer)
+    // first bit is a 0 if ACK
+    const ackId = mid << 1
+    // guarantee little endian
+    view.setUint32(0, ackId, true)
+    this.reply(ack)
+    console.log(`I've sent an ACK for ${mid}`)
+  }
+
+  private sendReq (mid: number) {
+    const req = new Uint8Array(4)
+    const view = new DataView(req.buffer)
+    // first bit is 0 if REQ
+    const reqId = (mid << 1) | 1
+    view.setUint32(0, reqId, true)
+    this.reply(req)
+    console.log(`I've sent an REQ for ${mid}`)
+  }
+
+  private releaseNextRobustMessage () {
+    const nextId = this.lastMid + 1
+    const message = this.robustQueue[nextId]
+    if (!message) {
+      // we're all caught up!
+      this.requestedMids.length = 0
+      return
+    }
+    delete this.robustQueue[nextId]
+    this.lastMid = nextId
+    this.emit('data', message)
+    this.releaseNextRobustMessage()
   }
 
   protected setup = () => {
@@ -72,7 +120,42 @@ class SSETrebuchet extends Trebuchet {
     })
 
     this.source.onmessage = (event: MessageEvent) => {
-      this.emit('data', JSON.parse(event.data))
+      const {message, mid} = decode(event.data)
+      if (!message) return
+      // handle non-reliable messages
+      if (typeof mid !== 'number' || mid > MAX_MID || mid < 0) {
+        this.emit('data', message)
+        return
+      }
+      // ignore mids that were already requested & processed
+      if (this.midsToIgnore.includes(mid)) return
+
+      // TCP guarantees AT MOST ONCE
+      // if a mid is requested, then the delivery guarantee becomes AT LEAST ONCE, so we need to ignore dupes
+      if (this.requestedMids.includes(mid)) {
+        this.midsToIgnore.push(mid)
+        if (this.midsToIgnore.length > MAX_IGNORE_LEN) {
+          this.midsToIgnore.splice(0, 1)
+        }
+      }
+
+      this.sendAck(mid)
+
+      if (this.lastMid + 1 === mid) {
+        // get next in order
+        this.lastMid = mid
+        this.emit('data', message)
+        this.releaseNextRobustMessage()
+        return
+      }
+
+      // a missing message was detected!
+      this.robustQueue[mid] = message
+
+      // request the first missing message (could get called multiple times)
+      const missingMid = this.lastMid + 1
+      this.sendReq(missingMid)
+      this.requestedMids.push(missingMid)
     }
   }
 
@@ -88,6 +171,12 @@ class SSETrebuchet extends Trebuchet {
       this.handleFetch(message).catch()
     } else {
       this.messageQueue.add(message)
+    }
+  }
+
+  reply = (data: ArrayBufferLike) => {
+    if (this.source.readyState === this.source.OPEN && this.connectionId && this.fetchReliable) {
+      this.fetchReliable(this.connectionId, data).catch()
     }
   }
 
