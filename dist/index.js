@@ -245,7 +245,6 @@ class SSETrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"] {
         const ackId = mid << 1;
         view.setUint32(0, ackId, true);
         this.reply(ack);
-        console.log(`I've sent an ACK for ${mid}`);
     }
     sendReq(mid) {
         const req = new Uint8Array(4);
@@ -253,7 +252,6 @@ class SSETrebuchet extends _Trebuchet__WEBPACK_IMPORTED_MODULE_0__["default"] {
         const reqId = (mid << 1) | 1;
         view.setUint32(0, reqId, true);
         this.reply(req);
-        console.log(`I've sent an REQ for ${mid}`);
     }
     releaseNextRobustMessage() {
         const nextId = this.lastMid + 1;

@@ -45,7 +45,6 @@ class SSETrebuchet extends Trebuchet {
     // guarantee little endian
     view.setUint32(0, ackId, true)
     this.reply(ack)
-    console.log(`I've sent an ACK for ${mid}`)
   }
 
   private sendReq (mid: number) {
@@ -55,7 +54,6 @@ class SSETrebuchet extends Trebuchet {
     const reqId = (mid << 1) | 1
     view.setUint32(0, reqId, true)
     this.reply(req)
-    console.log(`I've sent an REQ for ${mid}`)
   }
 
   private releaseNextRobustMessage () {
