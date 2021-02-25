@@ -1,6 +1,6 @@
 import EventEmitter from 'eventemitter3';
-import MessageQueue from './MessageQueue';
 import StrictEventEmitter from 'strict-event-emitter-types';
+import MessageQueue from './MessageQueue';
 export interface TrebuchetSettings {
     timeout?: number;
     batchDelay?: number;
@@ -31,6 +31,12 @@ declare abstract class Trebuchet extends Trebuchet_base {
     protected reconnectAttempts: number;
     protected reconnectTimeoutId: number | undefined;
     protected keepAliveTimeoutId: number | undefined;
+    protected lastMid: number;
+    protected robustQueue: {
+        [mid: number]: any;
+    };
+    protected midsToIgnore: number[];
+    protected requestedMids: number[];
     constructor(settings: TrebuchetSettings);
     abstract close(reason?: string): void;
     abstract send(message: any): void;

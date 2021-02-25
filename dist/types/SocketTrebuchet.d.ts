@@ -1,6 +1,9 @@
 import Trebuchet, { Data, TrebuchetSettings } from './Trebuchet';
 declare type Encode = (msg: any) => Data;
-declare type Decode = (msg: any) => any;
+declare type Decode = (msg: any) => {
+    message: any;
+    mid?: number;
+};
 export interface WSSettings extends TrebuchetSettings {
     getUrl: () => string;
     encode?: Encode;
@@ -15,6 +18,9 @@ declare class SocketTrebuchet extends Trebuchet {
     private mqTimer;
     constructor(settings: WSSettings);
     private keepAlive;
+    private sendAck;
+    private sendReq;
+    private releaseNextRobustMessage;
     protected setup(): void;
     send: (message: any) => void;
     close(reason?: string): void;
