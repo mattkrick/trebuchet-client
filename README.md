@@ -4,8 +4,9 @@ A friendly siege weapon to get 2-way communication through tough firewalls and b
 
 ## Why?
 
-Because "IT professionals" who believe they can secure their company by blocking WebSockets haven't retired yet.
-
+- "IT professionals" who believe they can secure their company by blocking WebSockets haven't retired yet.
+- A WebSocket doesn't guarantee a long-lived connection.
+- A WebSocket with a ping doesn't guarantee a message will get delivered.
 ## What's it do?
 
 - Establishes a 2-way communication with a client no matter what
@@ -17,6 +18,7 @@ Because "IT professionals" who believe they can secure their company by blocking
 - Supports WebSockets, WebRTC, and SSE. SSE will always work (barring a MITM attack). See [Browser Support](#browser-support)
 - Uses thunks for tree-shaking so you don't import trebuchets that you don't use
 - Supports custom encoding (ie binary data) where possible (SSE does not support binary)
+- Supports reliable messaging so you can be sure clients get the message
 
 ## Installation
 
@@ -29,7 +31,7 @@ Because "IT professionals" who believe they can secure their company by blocking
   - `encode`: An encoding mechanism, defaults to `JSON.stringify`
   - `decode`: A decoding mechanism, defaults to `JSON.parse`
   - `batchDelay`: default is `-1` (no delay), pass `0` or higher to wrap in a `setTimeout` (`0` waits until next tick, highly recommended, if the server supports it)
-- `SSETrebuchet({getUrl, fetchData, fethcPing})`: a constructor to establish server-sent events
+- `SSETrebuchet({getUrl, fetchData, fethcPing, fetchReliable})`: a constructor to establish server-sent events
 
 ## Example
 
@@ -40,6 +42,7 @@ const trebuchets = [
   () => new SocketTrebuchet({getUrl:  () => 'wss://my-server.co', enocde: msgpack.encode, decode: msgpack.decode, batchDelay: 10}),
   () => {
     const getUrl = () => 'https://my-server.co'
+    const fetchReliable = (connectionId, data) => fetch(`/sse/?reliable=true&id=${connectionId}`)
     const fetchPing = (connectionId) => fetch(`/sse/?ping=true&id=${connectionId}`)
     const fetchData = (data, connectionId) => fetch('/dataRoute', {
       method: 'POST',
@@ -49,7 +52,7 @@ const trebuchets = [
       },
       body: JSON.stringify(data)
     })
-    return new SSETrebuchet({getUrl, fetchData, fetchPing})
+    return new SSETrebuchet({getUrl, fetchData, fetchPing, fetchReliable})
   },
   () => {
     const fetchSignalServer = (signal) => fetch(`/rtc`, {method: 'POST', body: JSON.stringify(signal)})
@@ -81,6 +84,11 @@ const siege = async () => {
 }
 ```
 
+## Details
+- The ping is a single byte arraybuffer sent from the server. The client must reply within 10 seconds
+- Reliable messages include an ACK and REQ which are 4 byte payloads each.
+  - If the server sends a reliable message, it will include a message id. The client will reply with an ACK that includes the message id.
+  - If the id is not the previous id + 1, the client will queue that message & send a REQ for the first missing message. This guarantees message ordering.
 ## Browser Support
 Some browsers, namely IE11 and Edge, do not support EventSource (SSE) natively.
 To fix that, you'll need to polyfill it. See @mattkrick/event-source-polyfill.
