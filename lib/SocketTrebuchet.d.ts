@@ -26,4 +26,3 @@ declare class SocketTrebuchet extends Trebuchet {
     close(reason?: string): void;
 }
 export default SocketTrebuchet;
-//# sourceMappingURL=SocketTrebuchet.d.ts.map

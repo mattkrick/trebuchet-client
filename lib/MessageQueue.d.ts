@@ -7,4 +7,3 @@ declare class MessageQueue {
     flush(send: SendFn): void;
 }
 export default MessageQueue;
-//# sourceMappingURL=MessageQueue.d.ts.map

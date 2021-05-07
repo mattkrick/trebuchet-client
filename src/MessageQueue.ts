@@ -5,15 +5,15 @@ export type SendFn = (message: Data) => void
 class MessageQueue {
   queue: Array<Data> = []
 
-  add (message: Data) {
+  add(message: Data) {
     this.queue.push(message)
   }
 
-  clear () {
+  clear() {
     this.queue = []
   }
 
-  flush (send: SendFn) {
+  flush(send: SendFn) {
     const startingQueueLength = this.queue.length
     this.queue.forEach((message) => {
       send(message)

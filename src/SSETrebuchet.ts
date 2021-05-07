@@ -28,7 +28,7 @@ class SSETrebuchet extends Trebuchet {
   private readonly fetchPing: FetchPing
   private readonly fetchReliable?: FetchReliable
   private connectionId: string | undefined = undefined
-  constructor (settings: SSESettings) {
+  constructor(settings: SSESettings) {
     super(settings)
     this.getUrl = settings.getUrl
     this.fetchData = settings.fetchData
@@ -37,7 +37,7 @@ class SSETrebuchet extends Trebuchet {
     this.setup()
   }
 
-  private sendAck (mid: number) {
+  private sendAck(mid: number) {
     const ack = new Uint8Array(4)
     const view = new DataView(ack.buffer)
     // first bit is a 0 if ACK
@@ -47,7 +47,7 @@ class SSETrebuchet extends Trebuchet {
     this.reply(ack)
   }
 
-  private sendReq (mid: number) {
+  private sendReq(mid: number) {
     const req = new Uint8Array(4)
     const view = new DataView(req.buffer)
     // first bit is 0 if REQ
@@ -56,7 +56,7 @@ class SSETrebuchet extends Trebuchet {
     this.reply(req)
   }
 
-  private releaseNextRobustMessage () {
+  private releaseNextRobustMessage() {
     const nextId = this.lastMid + 1
     const message = this.robustQueue[nextId]
     if (!message) {
@@ -178,7 +178,7 @@ class SSETrebuchet extends Trebuchet {
     }
   }
 
-  close (reason?: string) {
+  close(reason?: string) {
     this.messageQueue.clear()
     if (this.source.CLOSED) return
     // called by the user, so we know it's intentional

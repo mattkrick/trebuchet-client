@@ -36,7 +36,7 @@ class SocketTrebuchet extends Trebuchet {
   private decode: Decode
   private mqTimer: number | undefined
 
-  constructor (settings: WSSettings) {
+  constructor(settings: WSSettings) {
     super(settings)
     const {decode, encode} = settings
     this.encode = encode || JSON.stringify
@@ -44,7 +44,7 @@ class SocketTrebuchet extends Trebuchet {
     this.getUrl = settings.getUrl
     this.setup()
   }
-  private keepAlive () {
+  private keepAlive() {
     // this.lastKeepAlive = now
     clearTimeout(this.keepAliveTimeoutId)
     // per the protocol, the server sends a ping every 10 seconds
@@ -55,7 +55,7 @@ class SocketTrebuchet extends Trebuchet {
     }, this.timeout * 1.5)
   }
 
-  private sendAck (mid: number) {
+  private sendAck(mid: number) {
     const ack = new Uint8Array(4)
     const view = new DataView(ack.buffer)
     // first bit is a 0 if ACK
@@ -65,7 +65,7 @@ class SocketTrebuchet extends Trebuchet {
     this.ws.send(ack)
   }
 
-  private sendReq (mid: number) {
+  private sendReq(mid: number) {
     const req = new Uint8Array(4)
     const view = new DataView(req.buffer)
     // first bit is 0 if REQ
@@ -74,7 +74,7 @@ class SocketTrebuchet extends Trebuchet {
     this.ws.send(req)
   }
 
-  private releaseNextRobustMessage () {
+  private releaseNextRobustMessage() {
     const nextId = this.lastMid + 1
     const message = this.robustQueue[nextId]
     if (!message) {
@@ -88,7 +88,7 @@ class SocketTrebuchet extends Trebuchet {
     this.releaseNextRobustMessage()
   }
 
-  protected setup () {
+  protected setup() {
     this.ws = new WebSocket(this.getUrl(), TREBUCHET_WS)
     this.ws.binaryType = 'arraybuffer'
     this.ws.onopen = this.handleOpen.bind(this)
@@ -187,7 +187,7 @@ class SocketTrebuchet extends Trebuchet {
     }
   }
 
-  close (reason?: string) {
+  close(reason?: string) {
     // called by the user, so we know it's intentional
     this.messageQueue.clear()
     if (this.ws.readyState === this.ws.CLOSED) return

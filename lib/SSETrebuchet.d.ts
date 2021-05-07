@@ -26,4 +26,3 @@ declare class SSETrebuchet extends Trebuchet {
     close(reason?: string): void;
 }
 export default SSETrebuchet;
-//# sourceMappingURL=SSETrebuchet.d.ts.map

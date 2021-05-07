@@ -1,5 +1,4 @@
 import EventEmitter from 'eventemitter3';
-import StrictEventEmitter from 'strict-event-emitter-types';
 import MessageQueue from './MessageQueue';
 export interface TrebuchetSettings {
     timeout?: number;
@@ -10,19 +9,16 @@ interface ClosePayload {
     reason?: string;
 }
 interface TrebuchetEvents {
-    close: ClosePayload;
-    data: object | string | boolean | number;
-    connected: void;
-    reconnected: void;
-    disconnected: void;
-    supported: boolean;
+    close: (payload: ClosePayload) => void;
+    data: (data: Record<string, unknown> | string | boolean | number | ArrayBufferLike) => void;
+    connected: () => void;
+    reconnected: () => void;
+    disconnected: () => void;
+    supported: (isSupported: boolean) => void;
 }
 export declare type Data = string | ArrayBufferLike;
-export declare type TrebuchetEmitter = {
-    new (): StrictEventEmitter<EventEmitter, TrebuchetEvents>;
-};
-declare const Trebuchet_base: TrebuchetEmitter;
-declare abstract class Trebuchet extends Trebuchet_base {
+export declare type TrebuchetEmitter = EventEmitter<TrebuchetEvents>;
+declare abstract class Trebuchet extends EventEmitter<TrebuchetEvents> {
     protected readonly backoff: Array<number>;
     protected readonly timeout: number;
     protected readonly batchDelay: number;
@@ -46,4 +42,3 @@ declare abstract class Trebuchet extends Trebuchet_base {
     isSupported(): Promise<boolean>;
 }
 export default Trebuchet;
-//# sourceMappingURL=Trebuchet.d.ts.map
