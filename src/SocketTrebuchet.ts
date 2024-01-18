@@ -140,7 +140,8 @@ class SocketTrebuchet extends Trebuchet {
     }
 
     this.ws.onerror = () => {
-      if (this.canConnect === undefined) {
+      // connection could get rejected after established due to changing server secret, etc.
+      if (this.canConnect !== false) {
         this.canConnect = false
         this.emit('supported', false)
       }
