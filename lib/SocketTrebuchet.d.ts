@@ -1,6 +1,6 @@
 import Trebuchet, { Data, TrebuchetSettings } from './Trebuchet';
-declare type Encode = (msg: any) => Data;
-declare type Decode = (msg: any) => {
+type Encode = (msg: any) => Data;
+type Decode = (msg: any) => {
     message: any;
     mid?: number;
 };

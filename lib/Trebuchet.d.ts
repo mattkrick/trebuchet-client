@@ -16,8 +16,8 @@ interface TrebuchetEvents {
     disconnected: () => void;
     supported: (isSupported: boolean) => void;
 }
-export declare type Data = string | ArrayBufferLike;
-export declare type TrebuchetEmitter = EventEmitter<TrebuchetEvents>;
+export type Data = string | ArrayBufferLike;
+export type TrebuchetEmitter = EventEmitter<TrebuchetEvents>;
 declare abstract class Trebuchet extends EventEmitter<TrebuchetEvents> {
     protected readonly backoff: Array<number>;
     protected readonly timeout: number;

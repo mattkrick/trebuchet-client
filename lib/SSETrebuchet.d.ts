@@ -1,7 +1,7 @@
 import Trebuchet, { Data, TrebuchetSettings } from './Trebuchet';
-export declare type FetchData = (data: any, connectionId: string) => Promise<Data>;
-export declare type FetchPing = (connectionId: string) => Promise<Response>;
-export declare type FetchReliable = (connectionId: string, data: ArrayBuffer) => Promise<Response>;
+export type FetchData = (data: any, connectionId: string) => Promise<Data>;
+export type FetchPing = (connectionId: string) => Promise<Response>;
+export type FetchReliable = (connectionId: string, data: ArrayBuffer) => Promise<Response>;
 export interface SSESettings extends TrebuchetSettings {
     getUrl: () => string;
     fetchData: FetchData;

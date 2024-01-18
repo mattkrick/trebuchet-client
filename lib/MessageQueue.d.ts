@@ -1,5 +1,5 @@
 import { Data } from './Trebuchet';
-export declare type SendFn = (message: Data) => void;
+export type SendFn = (message: Data) => void;
 declare class MessageQueue {
     queue: Array<Data>;
     add(message: Data): void;
