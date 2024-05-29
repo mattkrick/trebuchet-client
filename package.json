@@ -1,6 +1,6 @@
 {
   "name": "@mattkrick/trebuchet-client",
-  "version": "3.0.2",
+  "version": "3.0.3",
   "description": "A friendly siege weapon to get 2-way communication through tough firewalls and bad mobile networks",
   "author": "Matt Krick <matt.krick@gmail.com>",
   "main": "lib/index.js",
@@ -18,10 +18,8 @@
     "url": "https://github.com/mattkrick/trebuchet-client"
   },
   "dependencies": {
-    "@mattkrick/fast-rtc-peer": "^0.4.1",
-    "eventemitter3": "^4.0.7",
-    "tslib": "~2.2.0",
-    "typescript": "^4.2.4"
+    "eventemitter3": "^5.0.1",
+    "tslib": "^2.6.2"
   },
   "scripts": {
     "lint": "eslint --fix src/**/*.ts",
@@ -36,7 +34,8 @@
     "eslint-plugin-prettier": "^3.4.0",
     "husky": "^6.0.0",
     "lint-staged": "^11.0.0",
-    "prettier": "^2.2.1"
+    "prettier": "^2.2.1",
+    "typescript": "^5.4.5"
   },
   "license": "MIT",
   "lint-staged": {

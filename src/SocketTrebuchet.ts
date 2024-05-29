@@ -140,8 +140,9 @@ class SocketTrebuchet extends Trebuchet {
     }
 
     this.ws.onerror = () => {
-      // connection could get rejected after established due to changing server secret, etc.
-      if (this.canConnect !== false) {
+      // `canConnect` is a one-way flag. Once it is set, it cannot be changed, since we this strategy is supported
+      // If an error occurs, such as a changed auth credential, that does not change the fact that we canConnect
+      if (this.canConnect === undefined) {
         this.canConnect = false
         this.emit('supported', false)
       }
