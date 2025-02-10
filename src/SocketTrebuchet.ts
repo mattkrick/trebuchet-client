@@ -45,7 +45,6 @@ class SocketTrebuchet extends Trebuchet {
     this.setup()
   }
   private keepAlive() {
-    // this.lastKeepAlive = now
     clearTimeout(this.keepAliveTimeoutId)
     // per the protocol, the server sends a ping every 10 seconds
     // if it takes more than 5 seconds to receive that ping, something is wrong
@@ -92,7 +91,6 @@ class SocketTrebuchet extends Trebuchet {
     this.ws = new WebSocket(this.getUrl(), TREBUCHET_WS)
     this.ws.binaryType = 'arraybuffer'
     this.ws.onopen = this.handleOpen.bind(this)
-
     this.ws.onmessage = (event: MessageEvent) => {
       const {data} = event
       if (isPing(data)) {
@@ -190,6 +188,7 @@ class SocketTrebuchet extends Trebuchet {
   }
 
   close(reason?: string) {
+    clearTimeout(this.keepAliveTimeoutId)
     // called by the user, so we know it's intentional
     this.messageQueue.clear()
     if (this.ws.readyState === this.ws.CLOSED) return

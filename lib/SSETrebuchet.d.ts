@@ -1,7 +1,7 @@
 import Trebuchet, { Data, TrebuchetSettings } from './Trebuchet';
 export type FetchData = (data: any, connectionId: string) => Promise<Data>;
 export type FetchPing = (connectionId: string) => Promise<Response>;
-export type FetchReliable = (connectionId: string, data: ArrayBuffer) => Promise<Response>;
+export type FetchReliable = (connectionId: string, data: Uint8Array<ArrayBufferLike>) => Promise<Response>;
 export interface SSESettings extends TrebuchetSettings {
     getUrl: () => string;
     fetchData: FetchData;
@@ -22,7 +22,7 @@ declare class SSETrebuchet extends Trebuchet {
     protected setup: () => void;
     private handleFetch;
     send: (message: Data) => void;
-    reply: (data: ArrayBufferLike) => void;
+    reply: (data: Uint8Array<ArrayBufferLike>) => void;
     close(reason?: string): void;
 }
 export default SSETrebuchet;

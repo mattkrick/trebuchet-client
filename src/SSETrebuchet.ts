@@ -2,7 +2,10 @@ import Trebuchet, {Data, TrebuchetSettings} from './Trebuchet'
 
 export type FetchData = (data: any, connectionId: string) => Promise<Data>
 export type FetchPing = (connectionId: string) => Promise<Response>
-export type FetchReliable = (connectionId: string, data: ArrayBuffer) => Promise<Response>
+export type FetchReliable = (
+  connectionId: string,
+  data: Uint8Array<ArrayBufferLike>,
+) => Promise<Response>
 
 export interface SSESettings extends TrebuchetSettings {
   getUrl: () => string
@@ -172,13 +175,14 @@ class SSETrebuchet extends Trebuchet {
     }
   }
 
-  reply = (data: ArrayBufferLike) => {
+  reply = (data: Uint8Array<ArrayBufferLike>) => {
     if (this.source.readyState === this.source.OPEN && this.connectionId && this.fetchReliable) {
       this.fetchReliable(this.connectionId, data).catch()
     }
   }
 
   close(reason?: string) {
+    clearTimeout(this.keepAliveTimeoutId)
     this.messageQueue.clear()
     if (this.source.CLOSED) return
     // called by the user, so we know it's intentional
