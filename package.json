@@ -34,8 +34,8 @@
     "eslint-plugin-prettier": "^3.4.0",
     "husky": "^6.0.0",
     "lint-staged": "^11.0.0",
-    "prettier": "^2.2.1",
-    "typescript": "^5.4.5"
+    "prettier": "^3.5.0",
+    "typescript": "^5.7.3"
   },
   "license": "MIT",
   "lint-staged": {
