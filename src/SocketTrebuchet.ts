@@ -147,6 +147,8 @@ class SocketTrebuchet extends Trebuchet {
     }
 
     this.ws.onclose = (event: CloseEvent) => {
+      // end the keepAlive ASAP so if a reconnect happens the keepAlive doesn't fire prematurely
+      clearTimeout(this.keepAliveTimeoutId)
       // if the user or the firewall caused the close, don't reconnect & don't announce the disconnect
       const {code, reason} = event
       if (reason) {
@@ -188,7 +190,6 @@ class SocketTrebuchet extends Trebuchet {
   }
 
   close(reason?: string) {
-    clearTimeout(this.keepAliveTimeoutId)
     // called by the user, so we know it's intentional
     this.messageQueue.clear()
     if (this.ws.readyState === this.ws.CLOSED) return
